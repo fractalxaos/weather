@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>DIY Weather</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+    background-image: url("static/sunsetSky.jpg");
+}
+h2 {
+    font: bold 24px arial, sans-serif;
+}
+h4 {
+    font: bold 16px arial, sans-serif;
+}
+#mainContainer {
+    width: 740px;
+    text-align: center;
+    margin: auto;
+}
+#datetime {
+    padding: 10px;
+    font: bold 22px arial, sans-serif;
+}
+#notes {
+    font: 17px arial, sans-serif;
+    text-align: left;
+    padding: 10px;
+}
+.rowContainer {
+    display: table;
+    width: 100%;
+}
+.currentDataCell {
+    width: 50%;
+    padding: 10px;
+    font: bold 24px arial, sans-serif;
+    text-align: right;
+    display: table-cell;
+    vertical-align: middle;
+}
+.windDataCell {
+    width: 33%;
+    padding: 10px;
+    font: bold 18px arial, sans-serif;
+    display: table-cell;
+    vertical-align: middle;
+}
+.rainStatusCell {
+    width: 50%;
+    padding: 10px;
+    font: bold 18px arial, sans-serif;
+    display: table-cell;
+    vertical-align: top;
+}
+.dataItems {
+    padding: 2px;
+    text-align: left;
+    line-height: 130%;
+    display: inline-block;
+    vertical-align: middle;
+}
+.chartContainer {
+    padding: 2px;
+}
+img.chart {
+    width: 100%;
+}
+span.chartNav {
+    margin: auto;
+}
+ul.chartNav {
+    list-style-type: none;
+    margin: 10px;
+    padding: 0;
+    overflow: hidden;
+    background-color: #bbb;
+    text-align: center;
+}
+li.chartNav {
+    display: inline-block;
+    font: bold 18px arial, sans-serif;
+    color: black;
+}
+text.chartNav:hover {
+    background-color: #333;
+    cursor: pointer;
+    color: white;
+}
+text.chartNav {
+    display: inline-block;
+    padding: 8px 12px;
+}
+</style>
+</head>
+
+<body onload="main()">
+
+<div id="mainContainer">
+
+<h2><a href="https://github.com/fractalxaos/weather" 
+style="text-decoration:none" target="_new">
+DIY Weather Station</a></h2>
+<h4>Albany, Oregon</h4>
+
+<div id="datetime">
+<text id="date"></text>
+&nbsp;&nbsp;
+<text id="time"></text>
+</div>
+
+<div class="rowContainer">
+<div class="currentDataCell">
+<div class="dataItems">
+Temperature:<br>
+Humidity:<br>
+Pressure:
+</div>
+<div class="dataItems">
+<text id="tempf"></text> <sup>o</sup>F<br>
+<text id="humidity"></text> %<br>
+<text id="pressure"></text> "Hg
+</div>
+</div>
+
+<div class="currentDataCell" style="text-align: center;">
+Wind<br>
+<canvas id="cWind" class="windIndicator" width="100" height="100">
+</div>
+</div>
+
+<div class="rowContainer">
+<div class="windDataCell">
+Sustained Wind<br>
+<canvas id="cAvgWind" class="windIndicator" width="100" height="100">
+</div>
+
+<div class="windDataCell">
+Wind gusting to<br>
+<canvas id="cWindGust10m" class="windIndicator" width="100" height="100">
+</div>
+
+<div class="windDataCell">
+Highest gust today<br>
+<canvas id="cWindGust" class="windIndicator" width="100" height="100">
+</div>
+</div>
+
+<div class="rowContainer">
+<div class="rainStatusCell">
+<ins>Rain Fall</ins><br>
+<div class="dataItems">
+Last Hour:<br>
+Daily Total:
+</div>
+<div class="dataItems">
+<text id="rainin"></text><br>
+<text id="dailyrainin"></text>
+</div>
+</div>
+
+<div class="rainStatusCell">
+<ins>Weather Station</ins><br>
+<div class="dataItems">
+Status:<br>
+Battery Level:<br>
+Ambient Light:
+</div>
+<div class="dataItems">
+<text id="status"></text><br>
+<text id="batt_lvl"></text><br>
+<text id="light_lvl"></text> %
+</div>
+</div>
+</div>
+
+<span class="chartNav">
+<ul class="chartNav">
+<li class="chartNav">Select charts:</li>
+<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(1)">
+24 hours</text></li>
+<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(2)">
+10 days</text></li>
+<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(3)">
+3 months</text></li>
+<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(4)">
+12 months</text></li>
+</ul>
+</span>
+<br>
+
+<div class="chartContainer">
+<img class="chart" id="windspeedmph_g">
+</div>
+
+<div class="chartContainer">
+<img class="chart" id="tempf_g">
+</div>
+
+<div class="chartContainer">
+<img class="chart" id="pressure_g">
+</div>
+
+<div class="chartContainer">
+<img class="chart" id="humidity_g">
+</div>
+
+<div class="chartContainer">
+<img class="chart" id="rainin_g">
+</div>
+
+<div id="notes">
+<b>NOTES:</b>
+<ul>
+<li>DIY Weather Station project plans and software available at
+<a href="https://github.com/fractalxaos/weather" target="_new">
+<i>Github.com</i>
+</a>.</li>
+<li>Project plans include detailed instructions on how to build
+ your very own DIY weather station.</li>
+<li>Displayed weather data may be delayed by as much as 10 seconds from
+ time of actual measurement.</li>
+<li>Wind statistics are computed from sample spaces based on one sample
+ every second of measured wind velocity, where</li>
+<ul>
+<li><i>Sustained wind</i> is a moving average over the last two
+ minutes,</li>
+<li><i>Wind gusting to</i> is the highest wind gust measured over the
+ last ten minutes,</li>
+<li><i>Highest gust today</i> is the highest gust measured since
+ 12:00 AM today.</li>
+</ul>
+<li><i>Daily Total</i> rain fall is the total amount of rain fall
+ measured since 12:00 AM today.</li>
+<li>Project sponsored by
+ <a href="http://www.eugenemakerspace.com" TARGET="_NEW">
+ <i>Eugene Maker Space</i></a>, Eugene, Oregon.</li>
+</ul>
+</div>
+
+</div>
+<br><br>
+
+<script>
+
+/* Global constants */
+var weatherDataUrl = "dynamic/weatherOutputData.js";
+var compassPoint = [ 'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S',
+                     'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
+                     '-n/a-', ''];
+
+/* Global variables */
+var graphPeriod;
+
+/* Global objects */
+
+/* HTTP requests */
+var httpRequest = new XMLHttpRequest();
+
+/* Graphical canvas */
+var cWind = document.getElementById("cWind");
+var cAvgWind = document.getElementById("cAvgWind");
+var cWindGust = document.getElementById("cWindGust");
+var cWindGust10m = document.getElementById("cWindGust10m");
+
+/* Graphical object contexts */
+var ctxWind = cWind.getContext("2d");
+var ctxAvgWind = cAvgWind.getContext("2d");
+var ctxWindGust = cWindGust.getContext("2d");
+var ctxWindGust10m = cWindGust10m.getContext("2d");
+
+/* Chart Elements */
+var windspeedmph_g = document.getElementById("windspeedmph_g");
+var tempf_g = document.getElementById("tempf_g");
+var pressure_g = document.getElementById("pressure_g");
+var humidity_g = document.getElementById("humidity_g");
+var rainin_g = document.getElementById("rainin_g");
+
+/* Text Elements */
+var date_t = document.getElementById("date");    
+var time_t = document.getElementById("time");    
+var humidity_t = document.getElementById("humidity");    
+var tempf_t = document.getElementById("tempf");    
+var rainin_t = document.getElementById("rainin");    
+var dailyrainin_t = document.getElementById("dailyrainin");    
+var pressure_t = document.getElementById("pressure");    
+var batt_lvl_t = document.getElementById("batt_lvl");    
+var light_lvl_t = document.getElementById("light_lvl");    
+var status_t =  document.getElementById("status");    
+
+function main() {
+    /* Set graphical origin to center of canvas */
+    ctxWind.translate(cWind.width / 2, cWind.height / 2);
+    ctxAvgWind.translate(cAvgWind.width / 2, cAvgWind.height / 2);
+    ctxWindGust.translate(cWindGust.width / 2, cWindGust.height / 2);
+    ctxWindGust10m.translate(cWindGust10m.width / 2, cWindGust10m.height / 2);
+
+    graphPeriod = 1;
+
+    getWeatherData();
+    getWeatherGraphs();
+    setInterval(getWeatherData, 10000);
+    setInterval(getWeatherGraphs, 300000);
+}
+
+function getWeatherData() {
+    httpRequest.onreadystatechange = function() {
+        if (httpRequest.readyState == 4 && httpRequest.status == 200) {
+            var dataArray = JSON.parse(httpRequest.responseText);
+            displayData(dataArray[0]);
+        }
+    };
+    httpRequest.open("POST", weatherDataUrl, true);
+    httpRequest.send();
+}
+
+function setChartPeriod(n) {
+    graphPeriod = n;
+    getWeatherGraphs();
+}
+
+function getWeatherGraphs() {
+    var d = new Date;
+    var pfx;
+
+    switch(graphPeriod) {
+        case 1:
+            pfx = "1d_";
+            break;
+        case 2:
+            pfx = "10d_";
+            break;
+       case 3:
+            pfx = "3m_";
+            break;
+       case 4:
+            pfx = "12m_";
+            break;
+    }
+    windspeedmph_g.src = "dynamic/" + pfx + "windspeedmph.png?ver=" +
+                         d.getTime();
+    tempf_g.src = "dynamic/" + pfx + "tempf.png?ver=" + d.getTime();
+    pressure_g.src = "dynamic/" + pfx + "pressure.png?ver=" + d.getTime();
+    humidity_g.src = "dynamic/" + pfx + "humidity.png?ver=" + d.getTime();
+    rainin_g.src = "dynamic/" + pfx + "rainin.png?ver=" + d.getTime();
+}
+
+function displayData(dataItem) {
+    var timeStamp, date, time, hourminute, status;
+    var localDateObj, localTimeZone;
+
+    timeStamp = dataItem.date;
+    date = timeStamp.split(" ")[0];
+    time = timeStamp.split(" ")[1];
+    hourminute = time.split(":")[0] + ":" + time.split(":")[1];
+    localDateObj = new Date();
+    localTimeZone = localDateObj.getTimezoneOffset() / 60;
+
+    date_t.innerHTML = date;    
+    time_t.innerHTML = hourminute + "  <small>(GMT+" + 
+                       localTimeZone + ")</small>";
+    humidity_t.innerHTML = dataItem.humidity;
+    tempf_t.innerHTML = dataItem.tempf;
+    rainin_t.innerHTML = dataItem.rainin;
+    dailyrainin_t.innerHTML = dataItem.dailyrainin;
+    pressure_t.innerHTML = dataItem.pressure;
+    batt_lvl_t.innerHTML = dataItem.batt_lvl;
+    light_lvl_t.innerHTML = dataItem.light_lvl;
+
+    status = dataItem.status;
+    status_t.innerHTML = status;
+    if (status == "online") {
+       status_t.style.color = "green";
+    } else {
+       status_t.style.color = "red";
+    }
+
+    drawIndicator(ctxWind, cWind, dataItem.winddir,
+                  dataItem.windspeedmph);
+    drawIndicator(ctxAvgWind, cAvgWind, dataItem.winddir_avg2m,
+                  dataItem.windspeedmph_avg2m);
+    drawIndicator(ctxWindGust, cWindGust, dataItem.windgustdir,
+                  dataItem.windgustmph);
+    drawIndicator(ctxWindGust10m, cWindGust10m, dataItem.windgustdir_10m,
+                  dataItem.windgustmph_10m);
+}
+
+/* wind speed and direction graphical indicator */
+
+function drawIndicator(context, canvas, compassPointNum, windspeed) {
+    var radius =  canvas.height / 2.6 ;
+    var triangleHeight = 0.55 * radius;
+    var apexX = 0;
+    var apexY = triangleHeight / 2 - radius;
+
+    // start with a new, blank canvas
+    context.clearRect(-canvas.width / 2, -canvas.height / 2, canvas.width,
+                      canvas.height);
+    //rotate first then draw on canvas
+    context.rotate(compassPointNum * Math.PI / 8);
+    context.lineWidth = 2;
+    drawCircle(context, 0, 0, radius);
+    drawArrow(context, apexX, apexY, triangleHeight);
+    //reset canvas back to 0 rotation
+    context.rotate(-compassPointNum * Math.PI / 8);
+
+    /* draw wind speed centered in indicator */
+    context.font = "14px Arial";
+    context.textAlign = "center";
+    context.fillText(compassPoint[compassPointNum], 0, -0.37 * radius);
+    context.font = "24px Arial";
+    context.fillText(windspeed, 0, 0.2 * radius)
+    context.font = "14px Arial";
+    context.fillText("mph", 0, 0.6 * radius);
+}
+
+function drawArrow(context, apexX, apexY, height) {
+    context.beginPath();
+    context.moveTo(apexX, apexY);
+    context.lineTo(apexX - height / 4, apexY - height);
+    context.lineTo(apexX + height / 4, apexY - height);
+    context.lineTo(apexX, apexY);
+    context.closePath();
+    context.fillStyle = "#000000";
+    context.fill();
+}
+
+function drawCircle(context, xCtr, yCtr, radius) {
+    context.beginPath();
+    context.arc(xCtr, yCtr, radius, 0, 2 * Math.PI);
+    context.closePath();
+    context.stroke();
+}
+
+</script>
+
+</body>
+</html>
