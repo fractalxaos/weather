@@ -45,7 +45,6 @@
 /*
  * System configuration defines
  */
-#define REMOTE_SERVER_UPDATE_INTERVAL 10
 #define MAX_CONNECT_ATTEMPTS 12
 #define WIFI_CONNECT_RESET_TIME 10000
 
