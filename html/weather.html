@@ -250,7 +250,7 @@ var compassPoint = [ 'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S',
                      '-n/a-', ''];
 
 /* Global variables */
-var graphPeriod;
+var graphPeriod = 1;
 
 /* Global objects */
 
@@ -295,7 +295,13 @@ function main() {
     ctxWindGust.translate(cWindGust.width / 2, cWindGust.height / 2);
     ctxWindGust10m.translate(cWindGust10m.width / 2, cWindGust10m.height / 2);
 
-    graphPeriod = 1;
+    /* Register call back function to process client http requests */
+    httpRequest.onreadystatechange = function() {
+        if (httpRequest.readyState == 4 && httpRequest.status == 200) {
+            var dataArray = JSON.parse(httpRequest.responseText);
+            displayData(dataArray[0]);
+        }
+    };
 
     getWeatherData();
     getWeatherGraphs();
@@ -304,12 +310,6 @@ function main() {
 }
 
 function getWeatherData() {
-    httpRequest.onreadystatechange = function() {
-        if (httpRequest.readyState == 4 && httpRequest.status == 200) {
-            var dataArray = JSON.parse(httpRequest.responseText);
-            displayData(dataArray[0]);
-        }
-    };
     httpRequest.open("POST", weatherDataUrl, true);
     httpRequest.send();
 }
@@ -398,7 +398,7 @@ function drawIndicator(context, canvas, compassPointNum, windspeed) {
                       canvas.height);
     //rotate first then draw on canvas
     context.rotate(compassPointNum * Math.PI / 8);
-    context.lineWidth = 2;
+    context.lineWidth = 1;
     drawCircle(context, 0, 0, radius);
     drawArrow(context, apexX, apexY, triangleHeight);
     //reset canvas back to 0 rotation
