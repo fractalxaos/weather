@@ -1051,11 +1051,11 @@ void processMaintenanceCommand( char * sBuffer) {
       sWriteEeprom(cPtr, DESTINATION_URL);
       break;
 
-   case 't': // change destination server URL command
+   case 't': // change destination server update interval
       cPtr = strtok(sBuffer, "=");
       cPtr = strtok(NULL, "\r\n");
 
-      // perform bounds check: destination url must be 66 characters or less
+      // perform bounds check: update interval must be 3 characters or less
       if (cPtr == NULL) break;
       if (strlen(cPtr) > 3) break;
       
