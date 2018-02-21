@@ -1,12 +1,12 @@
 /*  EDIT THE FOLLOWING THREE LINES  */
 
-//#define DEST_SERVER "[your remote server URL - see instructions]"
-//#define SS_ID "[your wifi access point's SSID]" 
-//#define WPA_PASSWD "[your wifi access point's WPA password]"
-
-#define REMOTE_SERVER_UPDATE_INTERVAL "10"
+#define DEST_SERVER "[your remote server URL - see instructions]"
+#define SS_ID "[your wifi access point's SSID]" 
+#define WPA_PASSWD "[your wifi access point's WPA password]"
 
 /*  DO NOT EDIT ANYTHING BELOW THIS LINE */
+
+#define REMOTE_SERVER_UPDATE_INTERVAL "10"
 
 #include <EEPROM.h>
 #define DEST_SERVER_ADDR 0
