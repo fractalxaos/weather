@@ -42,6 +42,8 @@
 #   * v13 22 Nov 2017 by J L Owrey; added data validation rules to
 #         convertData function to handle occasionally data glitches from the
 #         weather station; improved diagnostic output; fixed bugs
+#   * v14 03 Mar 2018 by J L Owrey; improved online status diagnostic output;
+#         improved code readability and comments
 #
 
 # set to True in this script is running on a mirror server
@@ -72,16 +74,14 @@ _MAINTENANCE_FILE = _DOCROOT_DIRECTORY + 'maintsig'
 # rrdtool database file
 _RRD_FILE = '/home/%s/database/weatherData.rrd' % _USER
 # server url used by mirror server to get data from primary server
-_PRIMARY_SERVER_URL = 'http://{your primary server}/~pi/weather/' \
-                      'dynamic/weatherInputData.js'
+_PRIMARY_SERVER_URL = '{your primary server weather data url}'
 
     ### GLOBAL CONSTANTS ###
 
 # maximum number of failed updates from weather station
-_MAX_OFFLINE_COUNT = 2
-
+_MAX_FAILED_UPDATE_COUNT = 2
 # web page data item refresh rate (sec)
-_DEFAULT_WEB_DATA_UPDATE_INTERVAL = 10
+_DEFAULT_DATA_UPDATE_INTERVAL = 10
 # time out for request coming from mirror server
 _HTTP_REQUEST_TIMEOUT = 5
 # rrdtool database update rate (sec)
@@ -102,16 +102,16 @@ _PASCAL_CONVERSION_FACTOR = 0.00029530099194
 # correction for elevation above sea level
 _BAROMETRIC_PRESSURE_CORRECTION = 0.2266
 # conversion of light sensor to percentage value
-_LIGHT_SENSOR_FACTOR = 2.9
+_LIGHT_SENSOR_FACTOR = 3.0
 
    ### GLOBAL VARIABLES ###
 
 # turns on or off extensive debugging messages
 debugOption = False
 # modified by command line argument
-checkForUpdatePeriod = _DEFAULT_WEB_DATA_UPDATE_INTERVAL
+dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
 # used for determining if weather station online or offline
-offlineStatusCount = 0
+failedUpdateCount = 0
 previousUpdateTime = 0
 currentUpdateTime = 0
 # weather station status online or offline
@@ -150,7 +150,7 @@ def getEpochSeconds(sTime):
     return tSeconds
 ##end def
 
-def setOfflineStatus(dData):
+def setDataItemsToOfflineValues(dData):
     """Set the status of the weather station to "offline" and sends
        blank data to web clients.
        Parameters:
@@ -174,6 +174,7 @@ def setOfflineStatus(dData):
     dData['light_lvl'] = ''
     dData['status'] = 'offline'
 
+    writeOutputDataFile(dData, _OUTPUT_DATA_FILE)
     return
 ##end def
 
@@ -283,7 +284,7 @@ def parseInputDataString(sData, dData):
  
     # Trap any errors that might result from corrupted data.
     except Exception, exError:
-        print '%s parseInputDataString: %s' % (getTimeStamp(), exError)
+        print '%s parse failed: %s' % (getTimeStamp(), exError)
         return False
 
     # Parse all the elements in lsTmp and load them into the global dData
@@ -385,38 +386,42 @@ def checkOnlineStatus(dData):
            dData - dictionary object containing parsed weather data
        Returns true if successful, false otherwise.
     """
-    global previousUpdateTime, stationOnline, offlineStatusCount
+    global previousUpdateTime, stationOnline, failedUpdateCount
     
     # Compare with the time stamp from the previous update.
     # If they are equal for more than a specified amount of time, it means
     # that the weather station data has not been updated, and that the
     # weather station is offline or unreachable.
     if (currentUpdateTime == previousUpdateTime):
-        # Set offline status if no new data received in a specified
-        # amount of time.
-        if offlineStatusCount >= _MAX_OFFLINE_COUNT:
-            # Send a message to the log only once when offline detected.
+        if debugOption or True:
+            print '%s weather update failed' % getTimeStamp()
+
+        # Set status to offline if a specified number of intervals have
+        # elapsed without new data received from the weather station
+        if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
+            # Set status and send a message to the log if the station was
+            # previously online and is now determined to be offline.
             if stationOnline:
                 print '%s weather station offline' % getTimeStamp()
                 stationOnline = False
-                setOfflineStatus(dData)
-                writeOutputDataFile(dData, _OUTPUT_DATA_FILE)
+                setDataItemsToOfflineValues(dData)
         else:
-            offlineStatusCount += 1
+            failedUpdateCount += 1
         return False
     else:
-        # New data received so set status to online.
+        if debugOption:
+            print 'weather update received'
+
+        # New data received so set status condition to online.
         dData['status'] = 'online'
         previousUpdateTime = currentUpdateTime
-        offlineStatusCount = 0
+        failedUpdateCount = 0
 
-        # Send a message to the log if the station was previously offline
-        # and is now online.
+        # Set status and send a message to the log if the station was
+        # previously offline and is now online.
         if not stationOnline:
             print '%s weather station online' % getTimeStamp()
             stationOnline = True
-        if debugOption:
-            print 'weather update received'
         return True
     ##end if
 ##end def
@@ -468,12 +473,12 @@ def checkForMidnight():
     # If the number of elapsed seconds is smaller than the update interval
     # then midnight has just occurred and the weather station needs to be
     # sent its daily reset.
-    if secondsSinceMidnight < checkForUpdatePeriod:
+    if secondsSinceMidnight < dataUpdateInterval:
         if debugOption:
             print '%s sending midnight reset signal' % \
                   (getTimeStamp())
         result = setMaintenanceSignal('!r\n')
-        time.sleep(20)
+        time.sleep(30)
     return
 ##end def
 
@@ -694,7 +699,7 @@ def getCLarguments():
             except:
                 print 'invalid update period'
                 exit(-1)
-            checkForUpdatePeriod = tempVal
+            dataUpdateInterval = tempVal
             index += 1
         else:
             cmd_name = sys.argv[0].split('/')
@@ -759,12 +764,11 @@ def main():
         # After every weather station data transmission, get and process
         # weather station data from the local file that gets updated by the
         # submit.php script.
-        if currentTime - lastCheckForUpdateTime > checkForUpdatePeriod:
+        if currentTime - lastCheckForUpdateTime > dataUpdateInterval:
             lastCheckForUpdateTime = currentTime
             dData = {}
             result = True
  
-
             # Get weather station data from the input data file.
             if _MIRROR_SERVER:
                 sData = getWeatherDataFromPrimaryServer()
@@ -786,15 +790,17 @@ def main():
             status = checkOnlineStatus(dData)
             result = result and status
 
-            # If the station is online, convert the data.
+            # If the station is online and the data successfully parsed, 
+            # then convert the data.
             if result:
                 result = convertData(dData)
 
-            # Write web data to output data file.
+            # If the data successfully converted, then the write the data
+            # to the output data file.
             if result:
                writeOutputDataFile(dData, _OUTPUT_DATA_FILE)
 
-               # At the rrdtool database update interval write data to
+               # At the rrdtool database update interval write the data to
                # the rrdtool database.
                if currentTime - lastDatabaseUpdateTime > \
                        _DATABASE_UPDATE_INTERVAL:   
@@ -821,7 +827,7 @@ def main():
         elapsedTime = time.time() - currentTime
         if debugOption:
             print 'processing time: %6f sec\n' % elapsedTime
-        remainingTime = checkForUpdatePeriod - elapsedTime
+        remainingTime = dataUpdateInterval - elapsedTime
         if remainingTime > 0.0:
             time.sleep(remainingTime)
     ## end while
