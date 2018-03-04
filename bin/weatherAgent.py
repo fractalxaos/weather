@@ -835,5 +835,10 @@ def main():
 ## end def
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print '\nInterrupted'
+        if os.path.exists(_OUTPUT_DATA_FILE):
+            os.remove(_OUTPUT_DATA_FILE)
 

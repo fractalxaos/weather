@@ -244,39 +244,28 @@ Ambient Light:
 <script>
 
 /* Global constants */
+
 var weatherDataUrl = "dynamic/weatherOutputData.js";
 var compassPoint = [ 'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S',
                      'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
                      '-n/a-', ''];
 
-/* Global variables */
-var graphPeriod = 1;
+/* Global DOM objects */
 
-/* Global objects */
-
-/* HTTP requests */
-var httpRequest = new XMLHttpRequest();
-
-/* Graphical canvas */
+// Graphical canvas
 var cWind = document.getElementById("cWind");
 var cAvgWind = document.getElementById("cAvgWind");
 var cWindGust = document.getElementById("cWindGust");
 var cWindGust10m = document.getElementById("cWindGust10m");
 
-/* Graphical object contexts */
-var ctxWind = cWind.getContext("2d");
-var ctxAvgWind = cAvgWind.getContext("2d");
-var ctxWindGust = cWindGust.getContext("2d");
-var ctxWindGust10m = cWindGust10m.getContext("2d");
-
-/* Chart Elements */
+// Chart Elements
 var windspeedmph_g = document.getElementById("windspeedmph_g");
 var tempf_g = document.getElementById("tempf_g");
 var pressure_g = document.getElementById("pressure_g");
 var humidity_g = document.getElementById("humidity_g");
 var rainin_g = document.getElementById("rainin_g");
 
-/* Text Elements */
+// Text Elements
 var date_t = document.getElementById("date");    
 var time_t = document.getElementById("time");    
 var humidity_t = document.getElementById("humidity");    
@@ -288,22 +277,41 @@ var batt_lvl_t = document.getElementById("batt_lvl");
 var light_lvl_t = document.getElementById("light_lvl");    
 var status_t =  document.getElementById("status");    
 
+/* Global objects */
+
+// HTTP requests
+var httpRequest = new XMLHttpRequest();
+
+// Graphical object contexts
+var ctxWind = cWind.getContext("2d");
+var ctxAvgWind = cAvgWind.getContext("2d");
+var ctxWindGust = cWindGust.getContext("2d");
+var ctxWindGust10m = cWindGust10m.getContext("2d");
+
+/* Global variables */
+
+var graphPeriod;
+
+
 function main() {
-    /* Set graphical origin to center of canvas */
+    // Set graphical origin to center of canvas
     ctxWind.translate(cWind.width / 2, cWind.height / 2);
     ctxAvgWind.translate(cAvgWind.width / 2, cAvgWind.height / 2);
     ctxWindGust.translate(cWindGust.width / 2, cWindGust.height / 2);
     ctxWindGust10m.translate(cWindGust10m.width / 2, cWindGust10m.height / 2);
 
-    /* Register call back function to process client http requests */
+    // Register call back function to process client http requests
     httpRequest.onreadystatechange = function() {
         if (httpRequest.readyState == 4 && httpRequest.status == 200) {
             var dataArray = JSON.parse(httpRequest.responseText);
             displayData(dataArray[0]);
+        } else if (httpRequest.readyState == 4 && httpRequest.status == 404) {
+            displayOfflineStatus();
         }
     };
 
     getWeatherData();
+    graphPeriod = 1;
     getWeatherGraphs();
     setInterval(getWeatherData, 10000);
     setInterval(getWeatherGraphs, 300000);
@@ -385,6 +393,28 @@ function displayData(dataItem) {
                   dataItem.windgustmph_10m);
 }
 
+function displayOfflineStatus() {
+    var d = new Date();
+    localTimeZone = d.getTimezoneOffset() / 60;
+    date_t.innerHTML = d.getMonth() + "/" + d.getDate() + "/" + d.getFullYear();    
+    time_t.innerHTML = d.getHours() + ":" + d.getMinutes() + "  <small>(GMT+" + 
+                       localTimeZone + ")</small>";
+    humidity_t.innerHTML = "";
+    tempf_t.innerHTML = "";
+    rainin_t.innerHTML = "";
+    dailyrainin_t.innerHTML = "";
+    pressure_t.innerHTML = "";
+    batt_lvl_t.innerHTML = "";
+    light_lvl_t.innerHTML = "";
+    status_t.innerHTML = "offline";
+    status_t.style.color = "red";
+
+    drawIndicator(ctxWind, cWind, 16, "");
+    drawIndicator(ctxAvgWind, cAvgWind, 16, "");
+    drawIndicator(ctxWindGust, cWindGust, 16, "");
+    drawIndicator(ctxWindGust10m, cWindGust10m, 16, "");
+}
+
 /* wind speed and direction graphical indicator */
 
 function drawIndicator(context, canvas, compassPointNum, windspeed) {
@@ -396,15 +426,15 @@ function drawIndicator(context, canvas, compassPointNum, windspeed) {
     // start with a new, blank canvas
     context.clearRect(-canvas.width / 2, -canvas.height / 2, canvas.width,
                       canvas.height);
-    //rotate first then draw on canvas
+    // rotate first then draw on canvas
     context.rotate(compassPointNum * Math.PI / 8);
     context.lineWidth = 1;
     drawCircle(context, 0, 0, radius);
     drawArrow(context, apexX, apexY, triangleHeight);
-    //reset canvas back to 0 rotation
+    // reset canvas back to 0 rotation
     context.rotate(-compassPointNum * Math.PI / 8);
 
-    /* draw wind speed centered in indicator */
+    // draw wind speed centered in indicator
     context.font = "14px Arial";
     context.textAlign = "center";
     context.fillText(compassPoint[compassPointNum], 0, -0.37 * radius);
