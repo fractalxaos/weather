@@ -42,8 +42,8 @@
 #   * v13 22 Nov 2017 by J L Owrey; added data validation rules to
 #         convertData function to handle occasionally data glitches from the
 #         weather station; improved diagnostic output; fixed bugs
-#   * v14 03 Mar 2018 by J L Owrey; improved online status diagnostic output;
-#         improved code readability and comments
+#   * v14 03 Mar 2018 by J L Owrey; improved weather station online status
+#         handling; improved code readability and comments
 #
 
 # set to True in this script is running on a mirror server
@@ -148,34 +148,6 @@ def getEpochSeconds(sTime):
         return None
     tSeconds = int(time.mktime(t_sTime))
     return tSeconds
-##end def
-
-def setDataItemsToOfflineValues(dData):
-    """Set the status of the weather station to "offline" and sends
-       blank data to web clients.
-       Parameters:
-           dData - dictionary object containing weather data
-       Returns nothing.
-    """
-    dData['windspeedmph'] = ''
-    dData['winddir'] = 16 
-    dData['windgustmph'] = ''
-    dData['windgustdir'] = 16
-    dData['windspeedmph_avg2m'] = ''
-    dData['winddir_avg2m'] = 16
-    dData['windgustmph_10m'] = ''
-    dData['windgustdir_10m'] = 16
-    dData['humidity'] = ''
-    dData['tempf'] = ''
-    dData['rainin'] = ''
-    dData['dailyrainin'] = ''
-    dData['pressure'] = ''
-    dData['batt_lvl'] = ''
-    dData['light_lvl'] = ''
-    dData['status'] = 'offline'
-
-    writeOutputDataFile(dData, _OUTPUT_DATA_FILE)
-    return
 ##end def
 
 def setMaintenanceSignal(mSig):
@@ -404,7 +376,8 @@ def checkOnlineStatus(dData):
             if stationOnline:
                 print '%s weather station offline' % getTimeStamp()
                 stationOnline = False
-                setDataItemsToOfflineValues(dData)
+                if os.path.exists(_OUTPUT_DATA_FILE):
+                    os.remove(_OUTPUT_DATA_FILE)
         else:
             failedUpdateCount += 1
         return False
