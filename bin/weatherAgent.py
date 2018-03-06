@@ -57,6 +57,11 @@ import multiprocessing
 import time
 import json
 
+    ### PRIMARY SERVER URL ###
+
+# url used by a mirror server to get data from the primary server
+_PRIMARY_SERVER_URL = '{your primary server weather data url}'
+
     ### FILE AND FOLDER LOCATIONS ###
 
 # get the user running this script
@@ -73,8 +78,6 @@ _OUTPUT_DATA_FILE = _DOCROOT_DIRECTORY + 'dynamic/weatherOutputData.js'
 _MAINTENANCE_FILE = _DOCROOT_DIRECTORY + 'maintsig'
 # rrdtool database file
 _RRD_FILE = '/home/%s/database/weatherData.rrd' % _USER
-# server url used by mirror server to get data from primary server
-_PRIMARY_SERVER_URL = '{your primary server weather data url}'
 
     ### GLOBAL CONSTANTS ###
 
@@ -102,7 +105,7 @@ _PASCAL_CONVERSION_FACTOR = 0.00029530099194
 # correction for elevation above sea level
 _BAROMETRIC_PRESSURE_CORRECTION = 0.2266
 # conversion of light sensor to percentage value
-_LIGHT_SENSOR_FACTOR = 3.0
+_LIGHT_SENSOR_FACTOR = 3.1
 
    ### GLOBAL VARIABLES ###
 
@@ -150,6 +153,21 @@ def getEpochSeconds(sTime):
     return tSeconds
 ##end def
 
+def setStatusToOffline():
+    """Set weather station status to offline.  Removing the output data
+       file causes the client web page to show that the weather station
+       is offline.
+       Parameters: none
+       Returns: nothing
+    """
+    global stationOnline
+
+    print '%s weather station offline' % getTimeStamp()
+    stationOnline = False
+    if os.path.exists(_OUTPUT_DATA_FILE):
+       os.remove(_OUTPUT_DATA_FILE)
+##end def
+
 def setMaintenanceSignal(mSig):
     """Write a message to the weather maintenance file.  This file
        gets read by the submit.php script, which embeds the message into the
@@ -185,12 +203,12 @@ def readInputDataFile():
         sLine = fc.readline()
         fc.close()
     except Exception, exError:
-        print '%s: readInputDataFile: %s' % (getTimeStamp(), exError)
+        print '%s readInputDataFile: %s' % (getTimeStamp(), exError)
         return None
     else:
         sData = sLine.strip()
         if len(sData) == 0:
-            print '%s: input data file empty' % getTimeStamp()
+            print '%s input data file empty' % getTimeStamp()
             return None
 
         return sData
@@ -285,17 +303,13 @@ def convertData(dData):
     """
     try:
         # Convert pressure from pascals to inches Hg.
-        pressure = dData['p']
-        pressureBar = float(pressure) * _PASCAL_CONVERSION_FACTOR + \
-                          _BAROMETRIC_PRESSURE_CORRECTION
+        pressureBar = float(dData['p']) * _PASCAL_CONVERSION_FACTOR + \
+                      _BAROMETRIC_PRESSURE_CORRECTION
         dData['p'] = '%.2f' % pressureBar # format for web page
  
         # Convert ambient light level to percent
-        light = dData['l']
-        lightAdj = int(100.0 * float(light) / _LIGHT_SENSOR_FACTOR)
-        if lightAdj > 100:
-            lightAdj = 100
-        dData['l'] = '%d' % lightAdj 
+        lightPct = int(100.0 * float(dData['l']) / _LIGHT_SENSOR_FACTOR)
+        dData['l'] = '%d' % lightPct # format for web page
             
         # Replace key names with their long form name.
         dData['windspeedmph'] = dData.pop('ws')
@@ -321,7 +335,7 @@ def convertData(dData):
         return False
 
     # Bounds checking - in some instances an invalid value
-    # indicates a weather station fault requires the
+    # indicates a weather station fault that requires the
     # weather station to be rebooted.
 
     sensorValue = float(dData['pressure'])
@@ -358,7 +372,7 @@ def checkOnlineStatus(dData):
            dData - dictionary object containing parsed weather data
        Returns true if successful, false otherwise.
     """
-    global previousUpdateTime, stationOnline, failedUpdateCount
+    global previousUpdateTime, failedUpdateCount, stationOnline
     
     # Compare with the time stamp from the previous update.
     # If they are equal for more than a specified amount of time, it means
@@ -374,16 +388,13 @@ def checkOnlineStatus(dData):
             # Set status and send a message to the log if the station was
             # previously online and is now determined to be offline.
             if stationOnline:
-                print '%s weather station offline' % getTimeStamp()
-                stationOnline = False
-                if os.path.exists(_OUTPUT_DATA_FILE):
-                    os.remove(_OUTPUT_DATA_FILE)
+                setStatusToOffline()
         else:
             failedUpdateCount += 1
         return False
     else:
         if debugOption:
-            print 'weather update received'
+            print 'weather update successful'
 
         # New data received so set status condition to online.
         dData['status'] = 'online'
@@ -451,7 +462,7 @@ def checkForMidnight():
             print '%s sending midnight reset signal' % \
                   (getTimeStamp())
         result = setMaintenanceSignal('!r\n')
-        time.sleep(30)
+        time.sleep(20)
     return
 ##end def
 
@@ -725,8 +736,8 @@ def main():
     ## Exit with error if rrdtool database does not exist.
     if not os.path.exists(_RRD_FILE):
         print 'rrdtool database does not exist\n' \
-              'use createWeatherRrd script to' \
-              ' create rrdtool database\n'
+              'use createWeatherRrd script to ' \
+              'create rrdtool database\n'
         exit(1)
  
     ## main loop
@@ -805,13 +816,13 @@ def main():
             time.sleep(remainingTime)
     ## end while
     return
-## end def
+##end def
 
 if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
         print '\nInterrupted'
-        if os.path.exists(_OUTPUT_DATA_FILE):
-            os.remove(_OUTPUT_DATA_FILE)
+        setStatusToOffline()
 
+##end module
