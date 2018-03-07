@@ -38,15 +38,37 @@
 
 /***  PREPROCESSOR DEFINES  ***/
 
+/*
+  Uncomment to turn on output of verbose debug information to the usb
+  serial port.  Only use this option for development and test.
+*/
 //#define DEBUG
+/*
+  Uncomment to use the ESP8266 deep sleep mode.  The remote server update
+  interval must be set to a value greater than the deep sleep time.
+*/
 //#define USE_SLEEP_FUNCTION
+/*
+  Uncomment to have the ESP8266 do a hard reset only if not already
+  connected to a wifi access point.
+*/
 //#define SOFT_CONNECT
 
 /*
  * System configuration defines
  */
+
+/*
+  The maximum number of times the weather station attempts to connect
+  to the remote server before the weather station does a soft reboot.
+*/
 #define MAX_CONNECT_ATTEMPTS 12
-#define WIFI_CONNECT_RESET_TIME 10000
+/*
+  The amount of time (in milliseconds) the weather station waits before
+  initiating a soft reboot.  Controls the minimum cycle time between soft
+  reboots.
+*/
+#define SOFT_REBOOT_CYCLE_TIME 5000
 
 /*
  * Includes
@@ -539,7 +561,7 @@ void calcWeather() {
    * where angle is in radians. Converting angle back to compass points
    *     compassPoint = angle * 8 / PI
    * and a good approximation given by
-   *   compassPoint = atan2(xAccumulator, yAccumulator) * 2.546479
+   *     compassPoint = atan2(xAccumulator, yAccumulator) * 2.546479
    * Finally, since the atan2 function gives a negative result for left half
    * plane coordinates, subtract negative results from 16 to get the actual
    * compass point.
@@ -805,7 +827,7 @@ void reportWeather() {
     return;
   }
   /*
-   * Connect to the remote server via the standard HTTP port (80).
+   * Connect to the remote server.
    * Note that connect(SERVER, PORT) returns 
    *     1, if successful
    *     2, if already connected to the server
@@ -820,7 +842,7 @@ void reportWeather() {
     connectAttempts += 1;
     if(connectAttempts > MAX_CONNECT_ATTEMPTS - 1) {
       Serial.print(F("rebooting...\n"));
-      delay(5000);
+      delay(SOFT_REBOOT_CYCLE_TIME);
       softwareReset();
     }
     if (client.connected()) {
@@ -994,7 +1016,9 @@ void processMaintenanceCommand( char * sBuffer) {
    *     p=PASSWWORD - changes the wpa password stored in eeprom to the new
    *                   wpa password
    *     u=URL - changes the URL of the destination server to url
-   *     
+   *     t={integer} - changes the server update interval to the specified
+   *                   value (in seconds)
+   *
    *  Parameters:
    *    sBuffer - string containing the command from the server (if any)
    *  Returns nothing.
@@ -1104,7 +1128,7 @@ void initializeWifiAdapter()
    */
   if (result == false) {
     Serial.println(F("error connecting to wifi adapter"));
-    delay(5000);
+    delay(SOFT_REBOOT_CYCLE_TIME);
     softwareReset();
   }
   Serial.println(F("wifi adapter found"));
@@ -1138,7 +1162,7 @@ void connectWifiAccessPoint() {
     result = esp8266.setMode(ESP8266_MODE_STA);
     if (result < 0) {
       Serial.println(F("error setting wifi to station mode"));
-      delay(WIFI_CONNECT_RESET_TIME);
+      delay(SOFT_REBOOT_CYCLE_TIME);
       softwareReset();
     }
   }
@@ -1148,9 +1172,13 @@ void connectWifiAccessPoint() {
   /*
    * esp8266.status() indicates the ESP8266's wifi connect
    * status.  Returns 
-   *      1, when the device is already connected 
-   *      0, when disconnected. 
-   *      value < 0, when communication errors occur
+   *      1, when already connected to a wifi access point
+   *      0, when disconnected
+   *      value < 0, when communication errors occur.
+   *      
+   * If the SOFT_CONNECT option is defined, then the code will only reset
+   * the wifi connection if disconnected.  Otherwise the wifi connection
+   * will be reset everytime this function gets called.
    */
 #ifdef SOFT_CONNECT
   result = esp8266.status();
@@ -1167,7 +1195,7 @@ void connectWifiAccessPoint() {
     result = esp8266.connect(ssid, wpaPasswd);
     if (result < 0) {
         Serial.println(F("error connecting to wifi access point"));
-        delay(5000);
+        delay(SOFT_REBOOT_CYCLE_TIME);
         softwareReset();
     }
   }
@@ -1184,7 +1212,7 @@ void connectWifiAccessPoint() {
   result = esp8266.connect(ssid, wpaPasswd);
   if (result < 0) {
       Serial.println(F("error connecting to wifi access point"));
-      delay(5000);
+      delay(SOFT_REBOOT_CYCLE_TIME);
       softwareReset();
   }  
 #endif
