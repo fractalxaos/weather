@@ -1,12 +1,30 @@
 <?php
 
+/* 
+   Authenticate that the client (weather station) is on the local area
+   network.  This addresses a potential security issue that a malicious
+   client outside the network could inject bad data into the input data
+   file.
+*/
+//$aIp = "73.157.139.23";
+//$aIp = "192.168.1.26";
+$aIp = $_SERVER["SERVER_ADDR"];
+
+$cIp = explode(".", $_SERVER["REMOTE_ADDR"]);
+$sIp = explode(".", $aIp);
+for($inx = 0; $inx < count($cIp) - 1; $inx++) {
+    if( $cIp[$inx] != $sIp[$inx] ) {
+        die ("unauthorized client\n");
+    }
+}
+
 // Get path to weather station input data file
-define(_WEATHER_INPUT_DATA_FILE, str_replace("submit.php",
+define("_WEATHER_INPUT_DATA_FILE", str_replace("submit.php",
                                      "dynamic/weatherInputData.js",
                                      $_SERVER["SCRIPT_FILENAME"]));
 
 // Get path to weather station maintenance signal file
-define(_MAINTENANCE_SIGNAL_FILE, str_replace("submit.php", "maintsig",
+define("_MAINTENANCE_SIGNAL_FILE", str_replace("submit.php", "maintsig",
                                      $_SERVER["SCRIPT_FILENAME"]));
 
 function getMaintenanceSignal() {
