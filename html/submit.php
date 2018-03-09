@@ -6,8 +6,6 @@
    client outside the network could inject bad data into the input data
    file.
 */
-//$aIp = "73.157.139.23";
-//$aIp = "192.168.1.26";
 $aIp = $_SERVER["SERVER_ADDR"];
 
 $cIp = explode(".", $_SERVER["REMOTE_ADDR"]);
