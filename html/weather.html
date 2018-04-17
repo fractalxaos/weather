@@ -417,22 +417,32 @@ function displayOfflineStatus() {
 
 /* wind speed and direction graphical indicator */
 
+/* wind speed and direction graphical indicator */
+
 function drawIndicator(context, canvas, compassPointNum, windspeed) {
     var radius =  canvas.height / 2.6 ;
     var triangleHeight = 0.55 * radius;
     var apexX = 0;
     var apexY = triangleHeight / 2 - radius;
 
-    // start with a new, blank canvas
+    /*
+       Start with a new, blank canvas.  Note that the origin is in the
+       center of the canvas - NOT the upper left hand corner.
+    */
     context.clearRect(-canvas.width / 2, -canvas.height / 2, canvas.width,
                       canvas.height);
-    // rotate first then draw on canvas
+    /*
+      First rotate the canvas to the compass point, then draw the arrow.
+      Finally, reset the canvas back to zero rotation. Note that rotation
+      only affects drawings made after the rotation is done.  So, while
+      the arrow stays where drawn, further drawing is done with the canvas
+      in the zero rotation position.
+    */
     context.rotate(compassPointNum * Math.PI / 8);
+    drawArrow(context, apexX, apexY, triangleHeight);
+    context.rotate(-compassPointNum * Math.PI / 8);
     context.lineWidth = 1;
     drawCircle(context, 0, 0, radius);
-    drawArrow(context, apexX, apexY, triangleHeight);
-    // reset canvas back to 0 rotation
-    context.rotate(-compassPointNum * Math.PI / 8);
 
     // draw wind speed centered in indicator
     context.font = "14px Arial";
