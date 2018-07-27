@@ -52,6 +52,7 @@ _MIRROR_SERVER = False
 import urllib2
 import os
 import sys
+import signal
 import subprocess
 import multiprocessing
 import time
@@ -60,7 +61,7 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = '{your primary server weather data url}'
+_PRIMARY_SERVER_URL = "{your primary server url}"
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -82,7 +83,7 @@ _RRD_FILE = '/home/%s/database/weatherData.rrd' % _USER
     ### GLOBAL CONSTANTS ###
 
 # maximum number of failed updates from weather station
-_MAX_FAILED_UPDATE_COUNT = 2
+_MAX_FAILED_UPDATE_COUNT = 3
 # web page data item refresh rate (sec)
 _DEFAULT_DATA_UPDATE_INTERVAL = 10
 # time out for request coming from mirror server
@@ -166,6 +167,18 @@ def setStatusToOffline():
     stationOnline = False
     if os.path.exists(_OUTPUT_DATA_FILE):
        os.remove(_OUTPUT_DATA_FILE)
+##end def
+
+def signal_term_handler(signal, frame):
+    """Send message to log when process killed
+       Parameters: signal, frame - sigint parameters
+       Returns: nothing
+    """
+    print '%s terminating weather agent process' % \
+              (getTimeStamp())
+    if os.path.exists(_OUTPUT_DATA_FILE):
+       os.remove(_OUTPUT_DATA_FILE)
+    sys.exit(0)
 ##end def
 
 def setMaintenanceSignal(mSig):
@@ -379,7 +392,7 @@ def checkOnlineStatus(dData):
     # that the weather station data has not been updated, and that the
     # weather station is offline or unreachable.
     if (currentUpdateTime == previousUpdateTime):
-        if debugOption or True:
+        if debugOption or False:
             print '%s weather update failed' % getTimeStamp()
 
         # Set status to offline if a specified number of intervals have
@@ -718,6 +731,11 @@ def main():
        Parameters: none
        Returns nothing.
     """
+    signal.signal(signal.SIGTERM, signal_term_handler)
+
+    print '%s starting up weather agent process' % \
+                  (getTimeStamp())
+
     # uncomment to test midnight reset feature
     #testMidnightResetFeature()
 
@@ -822,7 +840,9 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print '\nInterrupted'
-        setStatusToOffline()
+        print '\n%s terminating weather agent process' % \
+              (getTimeStamp())
+        if os.path.exists(_OUTPUT_DATA_FILE):
+            os.remove(_OUTPUT_DATA_FILE)
 
 ##end module

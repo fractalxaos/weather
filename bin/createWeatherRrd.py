@@ -9,7 +9,7 @@
 # database to generate graphic charts for display in the weather station
 # web page.
 #
-# Copyright 2015 Jeff Owrey
+# Copyright 2018 Jeff Owrey
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
@@ -35,9 +35,7 @@
 #
 
 import os
-import time
 import subprocess
-import math
 
     ### DEFINE CONSTANTS ###
 
