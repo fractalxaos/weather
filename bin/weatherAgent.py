@@ -21,7 +21,7 @@
 #     - write the processed weather data to a JSON file for use by
 #       html documents
 #       
-# Copyright 2017 Jeff Owrey
+# Copyright 2018 Jeff Owrey
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
