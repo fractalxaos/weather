@@ -1,7 +1,7 @@
 /*
  DIY Weather Station
   
- Copyright 2018 Jeff Owrey
+ Copyright 2015 Jeff Owrey
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -557,11 +557,11 @@ void calcWeather() {
    * Once these averages are calculated, the result must be converted back
    * to polar coordinates by using the arc tangent function. Consider
    * the following formula
-   *     angle = atan2(average(x), average(y))
+   *     angle = atan2(xComponentAverage, yComponentAverage)
    * where angle is in radians. Converting angle back to compass points
    *     compassPoint = angle * 8 / PI
    * and a good approximation given by
-   *     compassPoint = atan2(average(x), average(y)) * 2.546479
+   *     compassPoint = atan2(xAccumulator, yAccumulator) * 2.546479
    * Finally, since the atan2 function gives a negative result for left half
    * plane coordinates, subtract negative results from 16 to get the actual
    * compass point.
@@ -693,7 +693,7 @@ byte getWindDirection() {
   if (adc < 1004) return (4);
   /*
      A disconnected or defective wind sensor results in a ADC reading
-     of between 1004 and 1023. In this case return 16 to indicate
+     of between 1004 and 1023. In this case return 16 as to indicate
      an exception.
   */
   return (16);
@@ -711,26 +711,10 @@ float getLightLevel() {
   float lightSensorVoltage;
   float referenceVoltage;
 
-  // get ADC readings
   referenceVoltage = averageAnalogRead(REFERENCE_3V);
   lightSensorVoltage = averageAnalogRead(LIGHT_LEVEL);
 
-  /*  The voltage supplied by U2 on the weathershield is actually closer 
-   *  to 3.25V, so use this value instead of 3.3V.
-   *   
-   *  Note that the power supply voltage is applied to the 5V pin on the
-   *  weather shield.  Hence, the reference voltage is the voltage of the 
-   *  power supply reduced by the voltage drop across IC3 on the Redboard 
-   *  plus the drop across U2 on the weather shield.
-   *  
-   *  The raw value of the analog to digital converter (ADC) is a ten bit 
-   *  integer.  So, first compute the normalization factor for converting 
-   *  the ADC raw integer value to a voltage value. To compute the normal-
-   *  ization factor divide 3.25V by the raw integer value from the ADC 
-   *  measurement of the reference voltage.  Next use this normalization 
-   *  factor to compute the light sensor voltage from the ADC measurement 
-   *  of the light sensor voltage.
-   */
+  //The reference voltage is 3.25V
   referenceVoltage = 3.25 / referenceVoltage;
   lightSensorVoltage = referenceVoltage * lightSensorVoltage;
 
@@ -754,39 +738,16 @@ float getBatteryLevel() {
   // get ADC readings
   referenceVoltage = averageAnalogRead(REFERENCE_3V);
   batteryVoltage = averageAnalogRead(BATTERY_LEVEL);
-
-  /*  The voltage supplied by U2 on the weathershield is actually closer 
-   *  to 3.25V, so use this value instead of 3.3V.
-   *   
-   *  The raw value of the analog to digital converter (ADC) is a ten bit 
-   *  integer.  So, first compute the normalization factor for converting 
-   *  the ADC raw integer value to a voltage value. To compute the normal-
-   *  ization factor divide 3.25V by the raw integer value from the ADC 
-   *  measurement of the reference voltage.  Next use this normalization 
-   *  factor to compute the voltage output from the battery voltage 
-   *  measurement circuit.
-   */
+  
+  // normalize the reference voltage ADC reading to 3.25 volts
   referenceVoltage = 3.25 / referenceVoltage;
+  // normalize battery voltage ADC reading to the reference voltage
   batteryVoltage = batteryVoltage * referenceVoltage;
  
   /*   
-   * Next compute the actual battery voltage across the battery voltage 
-   * measurement circuit.  A simple voltage divider comprises the battery
-   * voltage measurement circuit. So, the actual battery voltage vBattery
-   * may be computed by
-   *    
-   *   vBattery = vNormalized * vAdjust + 0.6
-   * 
-   * where
-   *   vAdjust = (R7 + R8) / R7 = (3.9K + 1.0K)/1.0K = 4.9
-   *   vNomalized, the voltage output by the battery voltage measurement
-   *               circuit
-   * 
-   * Note that the power supply voltage is applied to the 5V pin on the
-   * weather shield.  Hence, the reference voltage is the voltage of the 
-   * power supply reduced by the voltage drop across IC3 on the Redboard 
-   * plus the drop across U2 on the weather shield. To account for this
-   * loss 0.6 must added to vBattery get the true battery voltage
+   * Calculate the actual battery voltage across the voltage divider
+   * v = (R7 + R8) / R7 = (3.9K + 1.0K)/1.0K = 4.9 times normalized battery
+   * voltage plus 0.6 correction added to get true battery voltage
    */
   batteryVoltage = batteryVoltage * 4.9 + 0.6 ;
  
@@ -962,19 +923,24 @@ void reportWeather() {
 
   sReadEeprom(sBuffer, DESTINATION_URL);
   sDestServerAddr = strtok(sBuffer, "/");
-  sDestServerAddr = strtok(sDestServerAddr, ":");
-
-  /* 
-   *  Changed below 23 Nov 2017.
-   *  Due to changes in apache 2.4.10 and greater, apache now requres lines 
-   *  to be terminated by both the carriage return and newline characters.
+  
+  /* Modified 2018-10-06 by J Owrey to include
+   * port number with host name as required by
+   * http protocol. Line below commented out.
    */
-  client.print(" HTTP/1.1\r\nHost:");
-  client.print(sDestServerAddr);
-  client.print("\r\nConnection: close\r\n\r\n");
+  //sDestServerAddr = strtok(sDestServerAddr, ":");
+
+  client.println(" HTTP/1.1");
+  
+  client.print("Host: ");
+  client.println(sDestServerAddr);
+  
+  client.println("Connection: close");
+  client.println();
+
   sBuffer[0] = 0;
 
-  // allow time for remote server to respond (if necessary)
+  // Allow time for remote server to respond (if necessary)
   delay(10);
 
   /*
