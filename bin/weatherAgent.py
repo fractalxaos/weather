@@ -21,7 +21,7 @@
 #     - write the processed weather data to a JSON file for use by
 #       html documents
 #       
-# Copyright 2018 Jeff Owrey
+# Copyright 2017 Jeff Owrey
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
@@ -61,7 +61,8 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = "{your primary server url}"
+_PRIMARY_SERVER_URL = 'http://73.157.139.23:7361' \
+                      '/~pi/weather/dynamic/weatherInputData.js'
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -103,8 +104,8 @@ _CHART_HEIGHT = 150
 
 # inches Hg per Pascal
 _PASCAL_CONVERSION_FACTOR = 0.00029530099194
-# correction for elevation above sea level
-_BAROMETRIC_PRESSURE_CORRECTION = 0.2266
+# correction for 253 feet elevation above sea level
+_BAROMETRIC_PRESSURE_CORRECTION = 0.2767
 # conversion of light sensor to percentage value
 _LIGHT_SENSOR_FACTOR = 3.1
 
@@ -112,6 +113,8 @@ _LIGHT_SENSOR_FACTOR = 3.1
 
 # turns on or off extensive debugging messages
 debugOption = False
+# turn on or off logging of input file update fails
+logUpdateFails = True
 # modified by command line argument
 dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
 # used for determining if weather station online or offline
@@ -392,7 +395,7 @@ def checkOnlineStatus(dData):
     # that the weather station data has not been updated, and that the
     # weather station is offline or unreachable.
     if (currentUpdateTime == previousUpdateTime):
-        if debugOption or False:
+        if debugOption or logUpdateFails:
             print '%s weather update failed' % getTimeStamp()
 
         # Set status to offline if a specified number of intervals have
