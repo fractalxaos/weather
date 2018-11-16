@@ -48,7 +48,7 @@
 #         conversion error handling
 
 # set to True in this script is running on a mirror server
-_MIRROR_SERVER = True
+_MIRROR_SERVER = False
 
 # turn on or off logging of input file update fails
 logUpdateFails = False
@@ -65,7 +65,8 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = "{your primary server url}"
+_PRIMARY_SERVER_URL = '{your primary server url' \
+                      '/{user}/weather/dynamic/weatherInputData.js'
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -123,11 +124,6 @@ dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
 failedUpdateCount = 0
 previousUpdateTime = 0
 stationOnline = True
-
-    ### SOFTWARE TEST FUNCTIONS ###
-
-# used for testing midnight reset feature
-testResetOffsetSec = -1
 
     ### HELPER FUNCTIONS ###
 
@@ -493,12 +489,7 @@ def updateDatabase(dData):
    # convert string items to floating point numbers as necessary.
     try:
         time = getEpochSeconds(dData['date'])
-        windspeedmph = float(dData['windspeedmph_avg2m'])
         winddir = float(dData['winddir_avg2m']) * 22.5
-        tempf = float(dData['tempf'])
-        rainin = float(dData['rainin'])
-        pressure = float(dData['pressure'])
-        humidity = float(dData['humidity'])
     # Trap any data conversion errors.
     except Exception, exError:
         print '%s updateDatabase error: %s' % (getTimeStamp(), exError)
@@ -506,8 +497,10 @@ def updateDatabase(dData):
 
     # Format the rrdtool update command.
     strCmd = 'rrdtool update %s %s:%s:%s:%s:%s:%s:%s' % \
-                  (_RRD_FILE, time, windspeedmph, winddir, tempf, \
-                   rainin, pressure, humidity)
+                  (_RRD_FILE, time, dData['windspeedmph_avg2m'], winddir,
+                   dData['tempf'], dData['rainin'], dData['pressure'],
+                   dData['humidity'])
+    # Trap any data conversion errors
     if debugOption:
         #print '%s' % strCmd # DEBUG
         pass
@@ -706,7 +699,10 @@ def getCLarguments():
     return
 ##end def
 
-     ### SOFTWARE TEST FUNCTIONS ###
+    ### SOFTWARE TEST FUNCTIONS ###
+
+# used for testing midnight reset feature
+testResetOffsetSec = -1
 
 def testMidnightResetFeature():
     """Simple routine for testing station midnight reset feature by forcing
