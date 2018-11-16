@@ -65,8 +65,7 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = 'http://73.157.139.23:7361' \
-                      '/~pi/weather/dynamic/weatherInputData.js'
+_PRIMARY_SERVER_URL = "{your primary server url}"
 
     ### FILE AND FOLDER LOCATIONS ###
 
