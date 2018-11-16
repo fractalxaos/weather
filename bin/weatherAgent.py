@@ -44,10 +44,14 @@
 #         weather station; improved diagnostic output; fixed bugs
 #   * v14 03 Mar 2018 by J L Owrey; improved weather station online status
 #         handling; improved code readability and comments
-#
+#   * v15 11 Nov 2018 by J L Owrey; improved system fault handling and data
+#         conversion error handling
 
 # set to True in this script is running on a mirror server
-_MIRROR_SERVER = False
+_MIRROR_SERVER = True
+
+# turn on or off logging of input file update fails
+logUpdateFails = False
 
 import urllib2
 import os
@@ -113,15 +117,12 @@ _LIGHT_SENSOR_FACTOR = 3.1
 
 # turns on or off extensive debugging messages
 debugOption = False
-# turn on or off logging of input file update fails
-logUpdateFails = True
 # modified by command line argument
 dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
-# used for determining if weather station online or offline
+# used for detecting system faults and weather station online
+# or offline status
 failedUpdateCount = 0
 previousUpdateTime = 0
-currentUpdateTime = 0
-# weather station status online or offline
 stationOnline = True
 
     ### SOFTWARE TEST FUNCTIONS ###
@@ -166,13 +167,14 @@ def setStatusToOffline():
     """
     global stationOnline
 
-    print '%s weather station offline' % getTimeStamp()
+    if stationOnline:
+        print '%s weather station offline' % getTimeStamp()
     stationOnline = False
     if os.path.exists(_OUTPUT_DATA_FILE):
        os.remove(_OUTPUT_DATA_FILE)
 ##end def
 
-def signal_term_handler(signal, frame):
+def terminateAgentProcess(signal, frame):
     """Send message to log when process killed
        Parameters: signal, frame - sigint parameters
        Returns: nothing
@@ -255,8 +257,7 @@ def getWeatherDataFromPrimaryServer():
 
     except Exception, exError:
         # If no response is received from the station, then assume that
-        # the station is down or unreachable over the network.  In
-        # that case set the status of the device to offline.
+        # the station is down or unreachable over the network.
         if debugOption:
             print '%s http error: %s' % (getTimeStamp(), exError)
         return None
@@ -272,8 +273,6 @@ def parseInputDataString(sData, dData):
            dData - a dictionary object to contain the parsed weather data
        Returns: True, if successful  
     """
-    global currentUpdateTime
-
     try:
         # Parse JSON formatted data into a temporary dictionary object
         # which will contain the time stamp supplied by the submit.php
@@ -304,7 +303,6 @@ def parseInputDataString(sData, dData):
                (getTimeStamp())
         return False;
 
-    currentUpdateTime = getEpochSeconds(dData['date'])
     return True
 ##end def
 
@@ -318,11 +316,28 @@ def convertData(dData):
        Returns true if successful, false otherwise.
     """
     try:
-        # Convert pressure from pascals to inches Hg.
+        # Convert pressure from pascals to inches Hg
         pressureBar = float(dData['p']) * _PASCAL_CONVERSION_FACTOR + \
                       _BAROMETRIC_PRESSURE_CORRECTION
+        # Validate converted pressure
+        if pressureBar < 25.0 or pressureBar > 35.0:
+            raise Exception('invalid pressure: %.4e - discarding' % pressureBar)
         dData['p'] = '%.2f' % pressureBar # format for web page
  
+        # Validate temperature
+        tempf = float(dData['t'])
+        if tempf < -100.0:
+            setMaintenanceSignal('!r\n')
+            raise Exception('invalid temperature: %.4e - sending reset signal' \
+                % tempf)
+
+        # Validate humidity
+        humidity = float(dData['h'])
+        if humidity > 105.0 or humidity < 0.0:
+            setMaintenanceSignal('!r\n')
+            raise Exception('invalid humidity: %.4e - sending reset signal' \
+                % humidity)
+
         # Convert ambient light level to percent
         lightPct = int(100.0 * float(dData['l']) / _LIGHT_SENSOR_FACTOR)
         dData['l'] = '%d' % lightPct # format for web page
@@ -346,38 +361,13 @@ def convertData(dData):
 
     # Trap any data conversion errors.
     except Exception, exError:
-        print '%s convertData: %s' % (getTimeStamp(), exError)
-        print readInputDataFile()
-        return False
-
-    # Bounds checking - in some instances an invalid value
-    # indicates a weather station fault that requires the
-    # weather station to be rebooted.
-
-    sensorValue = float(dData['pressure'])
-    if sensorValue < 25.0 or sensorValue > 35.0:
-        print '%s invalid pressure: %.4e - discarding' % \
-            (getTimeStamp(), sensorValue)
-        return False
-
-    sensorValue = float(dData['tempf'])
-    if sensorValue < -100.0:
-        result = setMaintenanceSignal('!r\n')
-        print '%s invalid temperature: %.4e - sending reset signal' % \
-            (getTimeStamp(), sensorValue)
-        return False
-
-    sensorValue = float(dData['humidity'])
-    if sensorValue > 105.0 or sensorValue < 0.0:
-        result = setMaintenanceSignal('!r\n')
-        print '%s invalid humidity: %.4e - sending reset signal' % \
-            (getTimeStamp(), sensorValue)
+        print '%s data conversion error: %s' % (getTimeStamp(), exError)
         return False
 
     return True
 ##end def
 
-def checkOnlineStatus(dData):
+def verifyTimestamp(dData):
     """Check to see if the timestamp supplied by the submit.php script is
        updating at the weather station update rate.  If the timestamp
        is not getting updated, then the submit.php script is not receiving
@@ -388,42 +378,44 @@ def checkOnlineStatus(dData):
            dData - dictionary object containing parsed weather data
        Returns true if successful, false otherwise.
     """
-    global previousUpdateTime, failedUpdateCount, stationOnline
+    global previousUpdateTime
     
     # Compare with the time stamp from the previous update.
     # If they are equal for more than a specified amount of time, it means
     # that the weather station data has not been updated, and that the
     # weather station is offline or unreachable.
+    
+    currentUpdateTime = getEpochSeconds(dData['date'])
+
     if (currentUpdateTime == previousUpdateTime):
         if debugOption or logUpdateFails:
-            print '%s weather update failed' % getTimeStamp()
-
-        # Set status to offline if a specified number of intervals have
-        # elapsed without new data received from the weather station
-        if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
-            # Set status and send a message to the log if the station was
-            # previously online and is now determined to be offline.
-            if stationOnline:
-                setStatusToOffline()
-        else:
-            failedUpdateCount += 1
+            print '%s no new data' % getTimeStamp()
         return False
     else:
-        if debugOption:
-            print 'weather update successful'
-
-        # New data received so set status condition to online.
-        dData['status'] = 'online'
         previousUpdateTime = currentUpdateTime
-        failedUpdateCount = 0
+        return True
+    ##end if
+##end def
 
+def setStationStatus(updateSuccess):
+    global failedUpdateCount, stationOnline
+
+    if updateSuccess:
+        failedUpdateCount = 0
         # Set status and send a message to the log if the station was
         # previously offline and is now online.
         if not stationOnline:
             print '%s weather station online' % getTimeStamp()
             stationOnline = True
-        return True
-    ##end if
+        if debugOption:
+            print 'weather update successful'
+    else:
+        failedUpdateCount += 1
+        if debugOption:
+           print 'weather update failed'
+
+    if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
+        setStatusToOffline()
 ##end def
 
 def writeOutputDataFile(dData, sOutputDataFile):
@@ -436,6 +428,9 @@ def writeOutputDataFile(dData, sOutputDataFile):
     """
     # Set date item to current date and time.
     dData['date'] = getTimeStamp()
+
+    # Set status to online
+    dData['status'] = 'online'
 
     # Format the weather data as string using java script object notation.
     sData = '[{'
@@ -462,6 +457,8 @@ def checkForMidnight():
        Parameters: none
        Returns: nothing
     """
+    global previousUpdateTime
+
     # Get the number of seconds that have elapsed since midnight.
     now = time.localtime()
     secondsSinceMidnight = now.tm_hour * 3600 + now.tm_min * 60 + now.tm_sec
@@ -478,7 +475,8 @@ def checkForMidnight():
             print '%s sending midnight reset signal' % \
                   (getTimeStamp())
         result = setMaintenanceSignal('!r\n')
-        time.sleep(20)
+        previousUpdateTime = 0 
+        time.sleep(30)
     return
 ##end def
 
@@ -722,7 +720,7 @@ def testMidnightResetFeature():
     global testResetOffsetSec
 
     now = time.localtime()
-    testResetOffsetSec = 60 + now.tm_hour * 3600 + now.tm_min * 60 + \
+    testResetOffsetSec = 30 + now.tm_hour * 3600 + now.tm_min * 60 + \
                          now.tm_sec
 ##end def
 
@@ -734,7 +732,7 @@ def main():
        Parameters: none
        Returns nothing.
     """
-    signal.signal(signal.SIGTERM, signal_term_handler)
+    signal.signal(signal.SIGTERM, terminateAgentProcess)
 
     print '%s starting up weather agent process' % \
                   (getTimeStamp())
@@ -783,7 +781,9 @@ def main():
  
                 # Read the input data file from the submit.php script which
                 # processes data from the weather station.
-                sData = readInputDataFile() 
+                sData = readInputDataFile()
+
+            # If no data received, then do not proceed any further.
             if sData == None:
                 result = False
 
@@ -792,8 +792,8 @@ def main():
                  result = parseInputDataString(sData, dData)
 
             # Verify that the weather station is still online.
-            status = checkOnlineStatus(dData)
-            result = result and status
+            if result:
+                 result = verifyTimestamp(dData)
 
             # If the station is online and the data successfully parsed, 
             # then convert the data.
@@ -811,7 +811,11 @@ def main():
                        _DATABASE_UPDATE_INTERVAL:   
                    lastDatabaseUpdateTime = currentTime
                    # Update the round robin database with the parsed data.
-                   result = updateDatabase(dData)
+                   updateDatabase(dData)
+
+            # Set the station status to online or offline depending on the
+            # success or failure of the above operations.
+            setStationStatus(result)
 
         # At the day chart generation interval generate day charts.
         if currentTime - lastDayChartUpdateTime > _DAY_CHART_UPDATE_INTERVAL:
@@ -831,7 +835,8 @@ def main():
 
         elapsedTime = time.time() - currentTime
         if debugOption:
-            print 'processing time: %6f sec\n' % elapsedTime
+            print
+            #print 'processing time: %6f sec\n' % elapsedTime
         remainingTime = dataUpdateInterval - elapsedTime
         if remainingTime > 0.0:
             time.sleep(remainingTime)
@@ -843,9 +848,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print '\n%s terminating weather agent process' % \
-              (getTimeStamp())
-        if os.path.exists(_OUTPUT_DATA_FILE):
-            os.remove(_OUTPUT_DATA_FILE)
+        print '\n',
+        terminateAgentProcess('KeyboardInterrupt','Module')
 
 ##end module
