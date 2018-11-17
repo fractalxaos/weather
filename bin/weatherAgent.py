@@ -50,9 +50,6 @@
 # set to True in this script is running on a mirror server
 _MIRROR_SERVER = False
 
-# turn on or off logging of input file update fails
-logUpdateFails = False
-
 import urllib2
 import os
 import sys
@@ -65,8 +62,8 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = '{your primary server url' \
-                      '/{user}/weather/dynamic/weatherInputData.js'
+_PRIMARY_SERVER_URL = '{your primary server url}' \
+                      '/weather/dynamic/weatherInputData.js'
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -117,6 +114,7 @@ _LIGHT_SENSOR_FACTOR = 3.1
 
 # turns on or off extensive debugging messages
 debugOption = False
+verboseDebug = False
 # modified by command line argument
 dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
 # used for detecting system faults and weather station online
@@ -128,10 +126,9 @@ stationOnline = True
     ### HELPER FUNCTIONS ###
 
 def getTimeStamp():
-    """
-    Sets the error message time stamp to the local system time.
-    Parameters: none
-    Returns string containing the time stamp.
+    """Sets the error message time stamp to the local system time.
+       Parameters: none
+       Returns: string containing the time stamp
     """
     return time.strftime('%m/%d/%Y %H:%M:%S', time.localtime())
 ##end def
@@ -142,7 +139,7 @@ def getEpochSeconds(sTime):
        Parameters: 
            sTime - the time stamp to be converted must be formatted
                    as %m/%d/%Y %H:%M:%S
-       Returns epoch seconds.
+       Returns: epoch seconds
     """
     try:
         t_sTime = time.strptime(sTime, '%m/%d/%Y %H:%M:%S')
@@ -187,7 +184,7 @@ def setMaintenanceSignal(mSig):
        http response back to the weather station device.
        Parameters:
            mSig - a string containing the message to the weather station
-       Returns true if successful, false otherwise.
+       Returns: True if successful, False otherwise.
     """
     try:
         fc = open(_MAINTENANCE_FILE, 'w')
@@ -202,14 +199,13 @@ def setMaintenanceSignal(mSig):
     ### PUBLIC FUNCTIONS ###
 
 def readInputDataFile():
-    """Retrieves weather station data.  The data is contained in JSON file
-    located on the local host. This file gets updated by the submit.php
-    script whenever data is received from the weather station.
-    Parameters:
-        none
-    Returns:
-        raw weather station data as a string
-        None, if unsuccessful
+    """Retrieves weather station data.  The data is contained in a
+       Javascript file located on the local host. This file gets
+       updated by the submit.php script whenever data is received
+       from the weather station.
+       Parameters: none
+       Returns: string containing the weather station data, None
+                if unsuccessful
     """
     try:
         fc = open(_INPUT_DATA_FILE, 'r')
@@ -229,19 +225,17 @@ def readInputDataFile():
 
 def getWeatherDataFromPrimaryServer():
     """Send http request to the primary server.  The response
-       contains the weather data, formatted as an html document.
-    Parameters:
-        none
-    Returns:
-        a string containing the weather data
-        None, if unsuccessful.
+       contains the weather data in a Javascript file.
+       Parameters: none
+       Returns: a string containing the weather data, None
+                if unsuccessful.
     """
     try:
         currentTime = time.time()
         connection = urllib2.urlopen(_PRIMARY_SERVER_URL,
                                timeout=_HTTP_REQUEST_TIMEOUT)
         requestTime = time.time() - currentTime
-        if debugOption:
+        if verboseDebug:
             print 'http request: %.4f seconds' % requestTime
 
         # Format received data into a single string.
@@ -266,7 +260,7 @@ def parseInputDataString(sData, dData):
        Parameters: 
            sData - string containing the raw weather data
            dData - a dictionary object to contain the parsed weather data
-       Returns: True, if successful  
+       Returns: True if successful, False otherwise  
     """
     try:
         # Parse JSON formatted data into a temporary dictionary object
@@ -293,6 +287,7 @@ def parseInputDataString(sData, dData):
         if '=' in item:
             dData[item.split('=')[0]] = item.split('=')[1]
 
+    # Verify that the data is complete and uncorrupted.
     if len(dData) != 16:
         print '%s parse failed: corrupted data string' % \
                (getTimeStamp())
@@ -308,7 +303,7 @@ def convertData(dData):
        Parameters:
            dData - a dictionary object containing the data items to be
                    converted
-       Returns true if successful, false otherwise.
+       Returns: True if successful, False otherwise
     """
     try:
         # Convert pressure from pascals to inches Hg
@@ -369,9 +364,8 @@ def verifyTimestamp(dData):
        http requests from the weather station.  In this case assume that
        the weather station is down or not available via the network.
        Parameters: 
-           currentTime - system time of current web data update cycle
            dData - dictionary object containing parsed weather data
-       Returns true if successful, false otherwise.
+       Returns: True if successful, False otherwise
     """
     global previousUpdateTime
     
@@ -383,7 +377,7 @@ def verifyTimestamp(dData):
     currentUpdateTime = getEpochSeconds(dData['date'])
 
     if (currentUpdateTime == previousUpdateTime):
-        if debugOption or logUpdateFails:
+        if debugOption:
             print '%s no new data' % getTimeStamp()
         return False
     else:
@@ -393,6 +387,14 @@ def verifyTimestamp(dData):
 ##end def
 
 def setStationStatus(updateSuccess):
+    """Detect if radiation monitor is offline or not available on
+       the network. After a set number of attempts to get data
+       from the monitor set a flag that the station is offline.
+       Parameters:
+           updateSuccess - a boolean that is True if data request
+                           successful, False otherwise
+       Returns: nothing
+    """
     global failedUpdateCount, stationOnline
 
     if updateSuccess:
@@ -405,11 +407,15 @@ def setStationStatus(updateSuccess):
         if debugOption:
             print 'weather update successful'
     else:
+        # The last attempt failed, so update the failed attempts
+        # count.
         failedUpdateCount += 1
         if debugOption:
            print 'weather update failed'
 
     if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
+        # Max number of failed data requests, so set
+        # monitor status to offline.
         setStatusToOffline()
 ##end def
 
@@ -419,7 +425,8 @@ def writeOutputDataFile(dData, sOutputDataFile):
        by html documents.
        Parameters: 
            dData - dictionary object containing weather data
-       Returns true if successful, false otherwise
+           sOutputDataFile - the file to which to write the data
+       Returns: True if successful, False otherwise
     """
     # Set date item to current date and time.
     dData['date'] = getTimeStamp()
@@ -483,7 +490,7 @@ def updateDatabase(dData):
        Parameters:
            dData - dictionary object containing items to be written to the
                    rrdtool database
-       Returns true if successful, false otherwise.
+       Returns: True if successful, False otherwise
     """
    # Get the data items to be stored in rrdtool database, and
    # convert string items to floating point numbers as necessary.
@@ -501,9 +508,8 @@ def updateDatabase(dData):
                    dData['tempf'], dData['rainin'], dData['pressure'],
                    dData['humidity'])
     # Trap any data conversion errors
-    if debugOption:
-        #print '%s' % strCmd # DEBUG
-        pass
+    if verboseDebug:
+        print '%s' % strCmd # DEBUG
 
     # Run the formatted command as a subprocess.
     try:
@@ -537,7 +543,7 @@ def createAutoGraph(fileName, dataItem, gLabel, gTitle, gStart,
            autoScale - if True, then use vertical axis auto scaling
                (lower and upper parameters are ignored), otherwise use
                lower and upper parameters to set vertical axis scale
-       Returns true if successful, false otherwise.
+       Returns: True if successful, False otherwise
     """
     gPath = _CHARTS_DIRECTORY + fileName + '.png'
 
@@ -590,9 +596,8 @@ def createAutoGraph(fileName, dataItem, gLabel, gTitle, gStart,
         strCmd += 'AREA:wdir#FF0000:W '    # Red
         strCmd += 'AREA:nwdir#FF00FF:NW '  # Magenta
      
-    if debugOption:
-        # print '%s\n' % strCmd # DEBUG
-        pass
+    if verboseDebug:
+        print '%s\n' % strCmd # DEBUG
     
     # Run the formatted rrdtool command as a subprocess.
     try:
@@ -612,7 +617,7 @@ def generateDayGraphs():
     """Generate graphs for html documents. Calls createGraph for each graph
        that needs to be created.
        Parameters: none
-       Returns nothing.
+       Returns: nothing
     """
     createAutoGraph('1d_windspeedmph', 'windspeedmph', 'miles\ per\ hour', \
                 'Sustained\ Wind', 'now-1d', 0, 0, 0, True)
@@ -630,7 +635,7 @@ def generateLongGraphs():
     """Generate graphs for html documents. Calls createGraph for each graph
        that needs to be created.
        Parameters: none
-       Returns nothing.
+       Returns: nothing
     """
     # 10 day long graphs
     createAutoGraph('10d_windspeedmph', 'windspeedmph', 'miles\ per\ hour', \
@@ -675,14 +680,17 @@ def getCLarguments():
     """Get command line arguments - there are two possible arguments
           -d turns on debug mode
           -t sets the update poll interval in seconds (default=10)
-       Returns nothing.
+       Returns: nothing
     """
-    global debugOption, weatherUpdateInterval
+    global debugOption, verboseDebug, weatherUpdateInterval
 
     index = 1
     while index < len(sys.argv):
         if sys.argv[index] == '-d':
             debugOption = True
+        elif sys.argv[index] == '-v':
+            debugOption = True
+            verboseDebug = True
         elif sys.argv[index] == '-t':
             try:
                 tempVal = float(sys.argv[index + 1])
@@ -829,9 +837,10 @@ def main():
         # information for debugging and performance analysis.
 
         elapsedTime = time.time() - currentTime
-        if debugOption:
+        if debugOption and not verboseDebug:
             print
-            #print 'processing time: %6f sec\n' % elapsedTime
+        if verboseDebug:
+            print 'processing time: %6f sec\n' % elapsedTime
         remainingTime = dataUpdateInterval - elapsedTime
         if remainingTime > 0.0:
             time.sleep(remainingTime)
