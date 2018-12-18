@@ -62,8 +62,8 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = '{your primary server url}' \
-                      '/weather/dynamic/weatherInputData.js'
+_PRIMARY_SERVER_URL = 'http://73.157.139.23:7361' \
+                      '/~pi/weather/dynamic/weatherInputData.js'
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -323,10 +323,13 @@ def convertData(dData):
 
         # Validate humidity
         humidity = float(dData['h'])
-        if humidity > 105.0 or humidity < 0.0:
-            setMaintenanceSignal('!r\n')
-            raise Exception('invalid humidity: %.4e - sending reset signal' \
-                % humidity)
+        if humidity > 100.0:
+            print '%s invalid humidity: %.4e - discarding' % \
+                  (getTimeStamp(), humidity)
+            humidity = 100.0
+            dData['h'] = str(humidity)
+            #raise Exception('invalid humidity: %.4e - discarding' \
+            #    % humidity)
 
         # Convert ambient light level to percent
         lightPct = int(100.0 * float(dData['l']) / _LIGHT_SENSOR_FACTOR)
@@ -439,6 +442,9 @@ def writeOutputDataFile(dData, sOutputDataFile):
     for key in dData:
         sData += '\"%s\":\"%s\",' % (key, dData[key])
     sData = sData[:-1] + '}]\n'
+
+    if verboseDebug:
+        print sData
 
     # Write the string to the output data file for use by html documents.
     try:
