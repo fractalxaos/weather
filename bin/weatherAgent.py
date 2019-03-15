@@ -47,6 +47,10 @@
 #   * v15 11 Nov 2018 by J L Owrey; improved system fault handling and data
 #         conversion error handling
 
+# set to True to track all communication failures between the weather
+# station and the weather server
+reportUpdateFails = False
+
 # set to True in this script is running on a mirror server
 _MIRROR_SERVER = False
 
@@ -62,7 +66,7 @@ import json
     ### PRIMARY SERVER URL ###
 
 # url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = 'http://73.157.139.23:7361' \
+_PRIMARY_SERVER_URL = 'http://{your primary server url}' \
                       '/~pi/weather/dynamic/weatherInputData.js'
 
     ### FILE AND FOLDER LOCATIONS ###
@@ -323,13 +327,13 @@ def convertData(dData):
 
         # Validate humidity
         humidity = float(dData['h'])
-        if humidity > 100.0:
-            print '%s invalid humidity: %.4e - discarding' % \
-                  (getTimeStamp(), humidity)
-            humidity = 100.0
-            dData['h'] = str(humidity)
-            #raise Exception('invalid humidity: %.4e - discarding' \
-            #    % humidity)
+        if humidity > 110.0:
+            #print '%s invalid humidity: %.4e - discarding' % \
+            #      (getTimeStamp(), humidity)
+            #humidity = 100.0
+            #dData['h'] = str(humidity)
+            raise Exception('invalid humidity: %.4e - discarding' \
+                % humidity)
 
         # Convert ambient light level to percent
         lightPct = int(100.0 * float(dData['l']) / _LIGHT_SENSOR_FACTOR)
@@ -380,9 +384,10 @@ def verifyTimestamp(dData):
     currentUpdateTime = getEpochSeconds(dData['date'])
 
     if (currentUpdateTime == previousUpdateTime):
-        if debugOption:
-            print '%s no new data' % getTimeStamp()
-        return False
+        #if debugOption or False:
+        #    print '%s update failed' % getTimeStamp()
+        #return False
+        pass
     else:
         previousUpdateTime = currentUpdateTime
         return True
@@ -408,13 +413,13 @@ def setStationStatus(updateSuccess):
             print '%s weather station online' % getTimeStamp()
             stationOnline = True
         if debugOption:
-            print 'weather update successful'
+            print 'update successful'
     else:
         # The last attempt failed, so update the failed attempts
         # count.
         failedUpdateCount += 1
-        if debugOption:
-           print 'weather update failed'
+        if debugOption or reportUpdateFails:
+           print 'update failed'
 
     if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
         # Max number of failed data requests, so set
