@@ -1,4 +1,9 @@
 #!/bin/bash
+# Sends maintenance commands back to the weather station by modifying
+# the maintenance signal file.  The maintenance signal file contains
+# response returned to the weather station http client request that
+# sends the weather data to the submit.php script.
+
 WEA_MAINTENANCE_FILE="/home/pi/public_html/weather/maintsig"
 
 if [[ "$1" == "r" ]]; then

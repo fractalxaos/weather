@@ -1,5 +1,6 @@
 #!/bin/bash
-#
+# Starts the weatherAgent process.  Only starts up the process
+# if the process is not already running.
 
 APP_PATH="/home/$USER/bin"
 LOG_PATH="/home/$USER/log"

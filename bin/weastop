@@ -1,4 +1,6 @@
 #!/bin/bash
+# Stops the weatherAgent process.  Only stops the process
+# if the process is already running.
 
 PROCESS_ID="$(ps x| awk '/[w]eatherAgent.py/{print $1}')"
 
