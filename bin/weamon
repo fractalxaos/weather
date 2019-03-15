@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# define location of weather data file to display
+DATA_FILE_PATH="/tmp/weather/weatherInputData.js"
+
+# display data file once every second
+watch -n 1 -t "cat $DATA_FILE_PATH"
+

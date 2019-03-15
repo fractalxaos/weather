@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Set path to radmon input data file
-WEATHER_OUTPUT_DATA_FILE="/home/$USER/public_html/weather/dynamic/weatherOutputData.js"
-
 PROCESS_ID="$(ps x| awk '/[w]eatherAgent.py/{print $1}')"
 
 if [ -n "$PROCESS_ID" ]; then
@@ -11,4 +8,3 @@ if [ -n "$PROCESS_ID" ]; then
 else
   echo weatherAgent not running
 fi
-

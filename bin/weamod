@@ -1,6 +1,5 @@
 #!/bin/bash
-WEA_MAINTENANCE_FILE="/home/$USER/public_html/weather/maintsig"
-NEW_DESTINATION_SERVER="{your new destination server}"
+WEA_MAINTENANCE_FILE="/home/pi/public_html/weather/maintsig"
 
 if [[ "$1" == "r" ]]; then
   # send reset signal
@@ -24,8 +23,9 @@ elif [[ "$1" == "t" ]]; then
   # parameter should be an integer between 5 and 999.
   echo '!'t=$2 > $WEA_MAINTENANCE_FILE
 elif [[ "$1" == "a" ]]; then
-  # changes destination server to intravisions.com
-  echo '!'u=$NEW_DESTINATION_SERVER > $WEA_MAINTENANCE_FILE
+  # changes destination server to default server
+  #echo '!'u=intravisions.com:80/weather/submit.php > $WEA_MAINTENANCE_FILE
+  echo '!'u=192.168.1.23:80/~pi/weather/submit.php > $WEA_MAINTENANCE_FILE
 else
   echo usage: $(basename $0) PARAMETER [VALUE]
   exit 1
