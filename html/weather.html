@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body {
-    background-image: url("static/chalk.jpg");
+    background-image: url("static/sunsetSky.jpg");
 }
 h2 {
     font: bold 24px arial, sans-serif;
@@ -359,7 +359,7 @@ function getWeatherGraphs() {
 
 function displayData(dataItem) {
     var timeStamp, date, time, hourminute, status;
-    var localDateObj, localTimeZone;
+    var localDateObj, localTimeZone, timeZoneShift;
 
     timeStamp = dataItem.date;
     date = timeStamp.split(" ")[0];
@@ -367,9 +367,14 @@ function displayData(dataItem) {
     hourminute = time.split(":")[0] + ":" + time.split(":")[1];
     localDateObj = new Date();
     localTimeZone = localDateObj.getTimezoneOffset() / 60;
+    if (Math.sign(localTimeZone)) {
+       timeZoneShift = "-";
+    } else {
+       timeZoneShift = "+"
+    }
 
     date_t.innerHTML = date;    
-    time_t.innerHTML = hourminute + "  <small>(GMT+" + 
+    time_t.innerHTML = hourminute + "  <small>(UTC" + timeZoneShift +
                        localTimeZone + ")</small>";
     humidity_t.innerHTML = dataItem.humidity;
     tempf_t.innerHTML = dataItem.tempf;
@@ -399,10 +404,16 @@ function displayData(dataItem) {
 
 function displayOfflineStatus() {
     var d = new Date();
+    var localTimeZone, timeZoneShift;
+
     localTimeZone = d.getTimezoneOffset() / 60;
-    date_t.innerHTML = d.getMonth() + "/" + d.getDate() + "/" + d.getFullYear();    
-    time_t.innerHTML = d.getHours() + ":" + d.getMinutes() + "  <small>(GMT+" + 
-                       localTimeZone + ")</small>";
+    if (Math.sign(localTimeZone)) {
+       timeZoneShift = "-";
+    } else {
+       timeZoneShift = "+"
+    }    date_t.innerHTML = d.getMonth() + "/" + d.getDate() + "/" + d.getFullYear();    
+    time_t.innerHTML = d.getHours() + ":" + d.getMinutes() + "  <small>(UTC" +
+                       + timeZoneShift + localTimeZone + ")</small>";
     humidity_t.innerHTML = "";
     tempf_t.innerHTML = "";
     rainin_t.innerHTML = "";
