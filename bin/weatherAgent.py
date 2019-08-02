@@ -47,13 +47,6 @@
 #   * v15 11 Nov 2018 by J L Owrey; improved system fault handling and data
 #         conversion error handling
 
-# set to True to track all communication failures between the weather
-# station and the weather server
-reportUpdateFails = False
-
-# set to True in this script is running on a mirror server
-_MIRROR_SERVER = False
-
 import urllib2
 import os
 import sys
@@ -62,12 +55,6 @@ import subprocess
 import multiprocessing
 import time
 import json
-
-    ### PRIMARY SERVER URL ###
-
-# url used by a mirror server to get data from the primary server
-_PRIMARY_SERVER_URL = 'http://{your primary server url}' \
-                      '/~pi/weather/dynamic/weatherInputData.js'
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -92,8 +79,6 @@ _RRD_FILE = '/home/%s/database/weatherData.rrd' % _USER
 _MAX_FAILED_UPDATE_COUNT = 3
 # web page data item refresh rate (sec)
 _DEFAULT_DATA_UPDATE_INTERVAL = 10
-# time out for request coming from mirror server
-_HTTP_REQUEST_TIMEOUT = 5
 # rrdtool database update rate (sec)
 _DATABASE_UPDATE_INTERVAL = 60
 # generation rate of day charts (sec)
@@ -119,8 +104,11 @@ _LIGHT_SENSOR_FACTOR = 3.1
 # turns on or off extensive debugging messages
 debugOption = False
 verboseDebug = False
+reportUpdateFails = False
+
 # modified by command line argument
 dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
+
 # used for detecting system faults and weather station online
 # or offline status
 failedUpdateCount = 0
@@ -164,7 +152,7 @@ def setStatusToOffline():
     global stationOnline
 
     if stationOnline:
-        print '%s weather station offline' % getTimeStamp()
+        print '%s station offline' % getTimeStamp()
     stationOnline = False
     if os.path.exists(_OUTPUT_DATA_FILE):
        os.remove(_OUTPUT_DATA_FILE)
@@ -227,37 +215,6 @@ def readInputDataFile():
         return sData
 ##end def
 
-def getWeatherDataFromPrimaryServer():
-    """Send http request to the primary server.  The response
-       contains the weather data in a Javascript file.
-       Parameters: none
-       Returns: a string containing the weather data, None
-                if unsuccessful.
-    """
-    try:
-        currentTime = time.time()
-        connection = urllib2.urlopen(_PRIMARY_SERVER_URL,
-                               timeout=_HTTP_REQUEST_TIMEOUT)
-        requestTime = time.time() - currentTime
-        if verboseDebug:
-            print 'http request: %.4f seconds' % requestTime
-
-        # Format received data into a single string.
-        sData = ''
-        for line in connection:
-            sData += line.strip()
-        del connection
-
-    except Exception, exError:
-        # If no response is received from the station, then assume that
-        # the station is down or unreachable over the network.
-        if debugOption:
-            print '%s http error: %s' % (getTimeStamp(), exError)
-        return None
- 
-    return sData
-##end def
-
 def parseInputDataString(sData, dData):
     """Parse the weather data string into its component data items.
        The parsed data is stored in a dictionary object.
@@ -293,7 +250,7 @@ def parseInputDataString(sData, dData):
 
     # Verify that the data is complete and uncorrupted.
     if len(dData) != 16:
-        print '%s parse failed: corrupted data string' % \
+        print '%s parse failed' % \
                (getTimeStamp())
         return False;
 
@@ -384,9 +341,6 @@ def verifyTimestamp(dData):
     currentUpdateTime = getEpochSeconds(dData['date'])
 
     if (currentUpdateTime == previousUpdateTime):
-        #if debugOption or False:
-        #    print '%s update failed' % getTimeStamp()
-        #return False
         pass
     else:
         previousUpdateTime = currentUpdateTime
@@ -410,7 +364,7 @@ def setStationStatus(updateSuccess):
         # Set status and send a message to the log if the station was
         # previously offline and is now online.
         if not stationOnline:
-            print '%s weather station online' % getTimeStamp()
+            print '%s station online' % getTimeStamp()
             stationOnline = True
         if debugOption:
             print 'update successful'
@@ -419,7 +373,7 @@ def setStationStatus(updateSuccess):
         # count.
         failedUpdateCount += 1
         if debugOption or reportUpdateFails:
-           print 'update failed'
+           print '%s update failed' % getTimeStamp()
 
     if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
         # Max number of failed data requests, so set
@@ -690,6 +644,8 @@ def generateLongGraphs():
 def getCLarguments():
     """Get command line arguments - there are two possible arguments
           -d turns on debug mode
+          -v turns on verbose debug mode
+          -r reports update fails
           -t sets the update poll interval in seconds (default=10)
        Returns: nothing
     """
@@ -702,6 +658,8 @@ def getCLarguments():
         elif sys.argv[index] == '-v':
             debugOption = True
             verboseDebug = True
+        elif sys.argv[index] == '-r':
+            reportUpdateFails = True
         elif sys.argv[index] == '-t':
             try:
                 tempVal = float(sys.argv[index + 1])
@@ -786,16 +744,12 @@ def main():
             dData = {}
             result = True
  
-            # Get weather station data from the input data file.
-            if _MIRROR_SERVER:
-                sData = getWeatherDataFromPrimaryServer()
-            else:
-                # At midnight send the reset signal to the weather station.
-                checkForMidnight()
- 
-                # Read the input data file from the submit.php script which
-                # processes data from the weather station.
-                sData = readInputDataFile()
+            # At midnight send the reset signal to the weather station.
+            checkForMidnight()
+
+            # Read the input data file from the submit.php script which
+            # processes data from the weather station.
+            sData = readInputDataFile()
 
             # If no data received, then do not proceed any further.
             if sData == None:
