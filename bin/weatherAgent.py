@@ -163,10 +163,9 @@ def terminateAgentProcess(signal, frame):
        Parameters: signal, frame - sigint parameters
        Returns: nothing
     """
+    setStatusToOffline()
     print '%s terminating weather agent process' % \
               (getTimeStamp())
-    if os.path.exists(_OUTPUT_DATA_FILE):
-       os.remove(_OUTPUT_DATA_FILE)
     sys.exit(0)
 ##end def
 
@@ -212,6 +211,8 @@ def readInputDataFile():
             print '%s input data file empty' % getTimeStamp()
             return None
 
+        if verboseDebug:
+            print sData
         return sData
 ##end def
 
@@ -650,6 +651,7 @@ def getCLarguments():
        Returns: nothing
     """
     global debugOption, verboseDebug, weatherUpdateInterval
+    global reportUpdateFails
 
     index = 1
     while index < len(sys.argv):
