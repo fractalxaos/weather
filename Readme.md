@@ -8,7 +8,7 @@ Building a do-it-yourself (DIY) weather station is an exciting way to learn abou
 Building the weather station will give you an excellent introduction to a variety of technologies.  You will learn about programming Arduino micro-controllers, assembling electronic components, and using solar energy to power your project.  You will learn about Linux server software systems and architecture, scripting for Internet applications, and displaying information in a web page.
 </p>
 <p>
-You can find all the required software available under open source, GNU license at this project site.  Please read the <a href="DIY Weather Project Description.pdf">project description document</a> for details on procuring the materials, assembling the weather station and installing the software.
+You can find all the required software available under open source, GNU license at this project site.  Please read the <a href="server_model/docs/DIY Weather Project Description.pdf">project description document</a> for details on procuring the materials, assembling the weather station and installing the software.
 </p>
 <hr>
 <img src="./images/WeatherStation.jpg"><br>
