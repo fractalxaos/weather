@@ -1,0 +1,30 @@
+#!/bin/bash
+# Displays the weatherDataInput file every second. This is
+# useful for system verification and testing.  It allows for
+# confirming that the weather station is indeed regularly
+# sending data to the server.
+
+# define location of weather data file to display
+DATA_FILE_PATH="/tmp/weather/weatherInputData.js"
+
+if [[ "$1" == "-c" ]]; then
+  # continously display weather data on a single line
+  # display data file once every second
+
+  watch -n 1 -t -d 'cat /tmp/weather/weatherInputData.js;echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"'
+
+elif [[ "$1" == "" ]]; then
+  while [ 1 ]; do
+    sum1="$(md5sum "$DATA_FILE_PATH")"
+    sleep 1
+    sum2="$(md5sum "$DATA_FILE_PATH")"
+    if ! [ "$sum1" = "$sum2" ]; then
+      WDATA=`cat $DATA_FILE_PATH`
+      echo $WDATA
+    fi
+  done
+else
+  echo usage: $(basename $0) [-c]
+  exit 1
+fi
+

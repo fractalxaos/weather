@@ -1,0 +1,12 @@
+#!/bin/bash
+# Stops the weatherAgent process.  Only stops the process
+# if the process is already running.
+
+PROCESS_ID="$(ps x| awk '/[w]eatherAgent.py/{print $1}')"
+
+if [ -n "$PROCESS_ID" ]; then
+  printf "killing weather agent [%s]\n" $PROCESS_ID
+  kill $PROCESS_ID
+else
+  echo weatherAgent not running
+fi
