@@ -49,20 +49,29 @@
 #   * v20 02 Dec 2020 by J L Owrey; ported to python 3; modified to server
 #         model where the weather station acts in the role of http server
 #         and network clients request data from weather station
+#   * v24 released 14 Jun 2021 by J L Owrey; minor revisions
 #
-from urllib.request import urlopen
+#2345678901234567890123456789012345678901234567890123456789012345678901234567890
+
 import os
 import sys
 import signal
 import subprocess
 import multiprocessing
 import time
+import json
+from urllib.request import urlopen
+
+   ### ENVIRONMENT ###
 
 _USER = os.environ['USER']
+_SERVER_MODE = "primary"
+_STATION_PIN = '12345' # weather station PIN
 
    ### DEFAULT WEATHER STATION URL ###
 
-_DEFAULT_WEATHER_STATION_URL = "{your device url or ip address}"
+_DEFAULT_WEATHER_STATION_URL = \
+    "{your weather station url}"
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -72,9 +81,6 @@ _USER = os.environ['USER']
 _DOCROOT_DIRECTORY = '/home/%s/public_html/weather/' % _USER
 # location of weather charts used by html documents
 _CHARTS_DIRECTORY = _DOCROOT_DIRECTORY + 'dynamic/'
-# data file for mirror server
-_DATA_FORWARDING_FILE = \
-        "/home/%s/public_html/weather/dynamic/wea.dat" % _USER
 # data for use by other services and html documents
 _OUTPUT_DATA_FILE = _DOCROOT_DIRECTORY + 'dynamic/weatherData.js'
 # rrdtool database file
@@ -82,24 +88,26 @@ _RRD_FILE = '/home/%s/database/weatherData.rrd' % _USER
 
     ### GLOBAL CONSTANTS ###
 
-# weather station PIN
-_STATION_PIN = '12345'
+# maximum number of failed data requests allowed
+_MAX_FAILED_DATA_REQUESTS = 3
+# interval in seconds between data requests
+_DEFAULT_DATA_REQUEST_INTERVAL = 10
 # number seconds to wait for a response to HTTP request
-_HTTP_REQUEST_TIMEOUT = 2
-# maximum number of failed updates from weather station
-_MAX_FAILED_UPDATE_COUNT = 3
-# web page data item refresh rate (sec)
-_DEFAULT_DATA_UPDATE_INTERVAL = 10
-# rrdtool database update rate (sec)
+_HTTP_REQUEST_TIMEOUT = 3
+
+# interval in seconds between database updates
 _DATABASE_UPDATE_INTERVAL = 60
-# generation rate of day charts (sec)
+# interval in seconds between day chart updates
 _DAY_CHART_UPDATE_INTERVAL = 300
-# generation rate of long period charts (sec)
+# interval in seconds between long term chart updates
 _LONG_CHART_UPDATE_INTERVAL = 3600
 # standard chart width in pixels
 _CHART_WIDTH = 600
 # standard chart height in pixels
 _CHART_HEIGHT = 150
+
+# seconds waited after midnight reset before next data request
+_MIDNIGHT_RESET_HOLDOFF = 40
 
    ### CONVERSION FACTORS ###
 
@@ -114,27 +122,27 @@ _LIGHT_SENSOR_FACTOR = 3.1
 
 # turns on or off extensive debugging messages
 #   can be modified by command line arguments
-debugOption = False
-verboseDebug = False
+verboseMode = False
+debugMode = False
 reportUpdateFails = False
-
-# used for testing midnight reset feature
-testResetOffsetSec = -1
-
-# Periodicity of http requests sent to the weather station
-#   can be modified by command line argument
-dataUpdateInterval = _DEFAULT_DATA_UPDATE_INTERVAL
-# weather station url
-#   can be modified by command line argument
-weatherStationUrl = _DEFAULT_WEATHER_STATION_URL
-# weather station maintenance command
-maintenanceCommand = ""
 
 # used for detecting system faults and weather station online
 # or offline status
 failedUpdateCount = 0
-previousUpdateTime = 0
 stationOnline = True
+
+# Periodicity of http requests sent to the weather station
+#   can be modified by command line argument
+dataRequestInterval = _DEFAULT_DATA_REQUEST_INTERVAL
+# weather station url
+#   can be modified by command line argument
+weatherStationUrl = _DEFAULT_WEATHER_STATION_URL
+
+# used for testing midnight reset feature
+testResetOffsetSec = -1
+
+# weather station maintenance command
+maintenanceCommand = ""
 
     ### HELPER FUNCTIONS ###
 
@@ -175,11 +183,9 @@ def setStatusToOffline():
     if stationOnline:
         print('%s station offline' % getTimeStamp())
     stationOnline = False
-    if os.path.exists(_DATA_FORWARDING_FILE):
-        os.remove(_DATA_FORWARDING_FILE)
     if os.path.exists(_OUTPUT_DATA_FILE):
         os.remove(_OUTPUT_DATA_FILE)
- ##end def
+##end def
 
 def terminateAgentProcess(signal, frame):
     """Send message to log when process killed
@@ -194,7 +200,7 @@ def terminateAgentProcess(signal, frame):
 
     ### PUBLIC FUNCTIONS ###
 
-def getWeatherData():
+def getWeatherData(dData):
     """Send http request to the weather station.  The response
        contains the weather data, formatted
        as an html document.
@@ -207,46 +213,55 @@ def getWeatherData():
     """
     global maintenanceCommand
 
+    sUrl = weatherStationUrl + maintenanceCommand
+
     try:
         currentTime = time.time()
-        sUrl = weatherStationUrl + maintenanceCommand
+
         response = urlopen(sUrl, timeout=_HTTP_REQUEST_TIMEOUT)
-        requestTime = time.time() - currentTime
-        if verboseDebug:
+
+        if verboseMode:
+            requestTime = time.time() - currentTime
             print("http request: %.4f seconds" % requestTime)
 
-        # Format received data into a single string.
-        httpContent =  response.read().decode('utf-8')
-        content = ""
-        for line in httpContent:
-            content += line.replace('\n', '')
-        del response
+        content = response.read().decode('utf-8')
+        content = content.replace('\n', '')
+        content = content.replace('\r', '')
+        if content == "":
+            raise Exception("empty response")
 
     except Exception as exError:
         # If no response is received from the device, then assume that
         # the device is down or unavailable over the network.  In
         # that case return None to the calling function.
-        if debugOption:
+        if verboseMode:
             print("http error: %s" % exError)
-        return None
+        elif reportUpdateFails:
+            print("%s http error: %s" % (getTimeStamp(), exError))
+        return False
     ##end try
 
-    if verboseDebug:
+    if debugMode:
         print(content)
-        pass
     
+    dData['content'] = content
+
     # If reset command was sent to weather station then allow extra time
     # for the station to reset and re-acquire the wifi access point.
     if maintenanceCommand.find('/r') > -1:
         if content.find('ok') > -1:
             maintenanceCommand = ''
-            time.sleep(20)
-        #return None
-
-    return content
+            print() # blank line
+            time.sleep(_MIDNIGHT_RESET_HOLDOFF)
+        else:
+            print("%s midnight reset failed" % getTimeStamp())
+            return False
+    ## end if
+ 
+    return True
 ##end def
 
-def parseInputDataString(sData, dData):
+def parseDataString(dData):
     """Parse the weather station data string into its component parts.  
        Parameters:
            sData - the string containing the data to be parsed
@@ -258,23 +273,24 @@ def parseInputDataString(sData, dData):
     #    h=73.4,t=58.5,p=101189.0,r=0.00,dr=0.00,b=3.94,l=1.1,#
     #
     try:
-        sTmp = sData[2:-2]
-        lsTmp = sTmp.split(',')
+        sData = dData.pop('content')
+        lData = sData[2:-2].split(',')
     except Exception as exError:
         print("%s parse failed: %s" % (getTimeStamp(), exError))
         return False
 
+    # Verfy the expected number of data items have been received.
+    if len(lData) != 15:
+        print("%s parse failed: corrupted data string" % getTimeStamp())
+        return False;
+
     # Load the parsed data into a dictionary object for easy access.
-    for item in lsTmp:
+    for item in lData:
         if "=" in item:
             dData[item.split('=')[0]] = item.split('=')[1]
     # Add date and status to dictionary object
     dData['status'] = 'online'
     dData['date'] = getTimeStamp()
-
-    if len(dData) != 17:
-        print("%s parse failed: corrupted data string" % (getTimeStamp()))
-        return False;
 
     return True
 ##end def
@@ -346,31 +362,6 @@ def convertData(dData):
     return True
 ##end def
 
-def verifyTimestamp(dData):
-    """Check to see if the time stamped data is updating at the weather
-       station update rate.  If the timestamp is not getting updated,
-       then assume that the weather station is down or not available
-       via the network.
-       Parameters: 
-           dData - dictionary object containing parsed weather data
-       Returns: True if successful, False otherwise
-    """
-    global previousUpdateTime
-    
-    # Compare with the time stamp from the previous update.
-    # If they are equal for more than a specified amount of time, it means
-    # that the weather station data has not been updated, and that the
-    # weather station is offline or unreachable.
-    
-    currentUpdateTime = getEpochSeconds(dData['date'])
-
-    if (currentUpdateTime == previousUpdateTime):
-        return False
-    else:
-        previousUpdateTime = currentUpdateTime
-    return True
-##end def
-
 def setStationStatus(updateSuccess):
     """Detect if radiation monitor is offline or not available on
        the network. After a set number of attempts to get data
@@ -380,7 +371,7 @@ def setStationStatus(updateSuccess):
                            successful, False otherwise
        Returns: nothing
     """
-    global failedUpdateCount, stationOnline
+    global failedUpdateCount, stationOnline, maintenanceCommand
 
     if updateSuccess:
         failedUpdateCount = 0
@@ -389,22 +380,20 @@ def setStationStatus(updateSuccess):
         if not stationOnline:
             print('%s station online' % getTimeStamp())
             stationOnline = True
-        if debugOption:
-            print('%s update successful' % getTimeStamp())
     else:
         # The last attempt failed, so update the failed attempts
         # count.
         failedUpdateCount += 1
-        if debugOption or reportUpdateFails:
-           print('%s update failed' % getTimeStamp())
+    ## end if
 
-    if failedUpdateCount >= _MAX_FAILED_UPDATE_COUNT:
+    if failedUpdateCount >= _MAX_FAILED_DATA_REQUESTS:
         # Max number of failed data requests, so set
         # monitor status to offline.
+        maintenanceCommand = ''
         setStatusToOffline()
 ##end def
 
-def writeOutputDataFile(dData, sOutputDataFile):
+def writeOutputFile(dData):
     """Writes to a file a formatted string containing the weather data.
        The file is written to the document dynamic data folder for use
        by html documents.
@@ -413,40 +402,33 @@ def writeOutputDataFile(dData, sOutputDataFile):
            sOutputDataFile - the file to which to write the data
        Returns: True if successful, False otherwise
     """
+
     # Format the weather data as string using java script object notation.
-    sData = '[{'
-    for key in dData:
-        sData += '\"%s\":\"%s\",' % (key, dData[key])
-    sData = sData[:-1] + '}]\n'
+    jsData = json.loads("{}")
+    try:
+        for key in dData:
+            jsData.update({key:dData[key]})
+        jsData.update({"serverMode":"%s" % _SERVER_MODE })
+        sData = "[%s]" % json.dumps(jsData)
+    except Exception as exError:
+        print("%s writeOutputFile: %s" % (getTimeStamp(), exError))
+        return False
 
-    if verboseDebug:
+    if debugMode:
         print(sData)
-        pass
 
     # Write the string to the output data file for use by html documents.
     try:
-        fc = open(sOutputDataFile, 'w')
+        fc = open(_OUTPUT_DATA_FILE, 'w')
         fc.write(sData)
         fc.close()
     except Exception as exError:
-        print('%s writeOutputDataFile: %s' % (getTimeStamp(), exError))
+        print('%s writeOutputFile: %s' % (getTimeStamp(), exError))
         return False
     return True
 ##end def
 
-def writeForwardingFile(sData):
-    # Write the string to the output data file for use by html documents.
-    try:
-        fc = open(_DATA_FORWARDING_FILE, "w")
-        fc.write(sData)
-        fc.close()
-    except Exception as exError:
-        print("%s writeOutputDataFile: %s" % (getTimeStamp(), exError))
-        return False
-    return True
-##end def
-
-def checkForMidnight():
+def midnightReset():
     """Check the time to see if midnight has just occurred during the last
        device update cycle. If so, then send a reset message to the weather
        station.
@@ -462,12 +444,13 @@ def checkForMidnight():
     # Perform a test of the midnight reset feature if requested.
     if testResetOffsetSec > 0:
         secondsSinceMidnight = abs(testResetOffsetSec - secondsSinceMidnight)
+        #print('secondsSinceMidnight:%s' % secondsSinceMidnight)
 
     # If the number of elapsed seconds is smaller than the update interval
     # then midnight has just occurred and the weather station needs to be
     # sent its daily reset.
-    if secondsSinceMidnight < dataUpdateInterval:
-        if debugOption or True:
+    if secondsSinceMidnight < dataRequestInterval:
+        if verboseMode:
             print('%s sending midnight reset signal' % \
                  (getTimeStamp()))
         maintenanceCommand = '/' + _STATION_PIN + '/r'
@@ -500,8 +483,8 @@ def updateDatabase(dData):
                    dData['tempf'], dData['rainin'], dData['pressure'],
                    dData['humidity'])
     # Trap any data conversion errors
-    if verboseDebug:
-        print('%s\n' % strCmd) # DEBUG
+    if debugMode:
+        print('%s' % strCmd) # DEBUG
 
     # Run the formatted command as a subprocess.
     try:
@@ -511,9 +494,10 @@ def updateDatabase(dData):
         print('%s rrdtool update failed: %s' % \
               (getTimeStamp(), exError.output))
         return False
-    else:
-        if debugOption:
-            print('database update successful')
+
+    if verboseMode and not debugMode:
+        print('update database')
+
     return True
 ##end def
 
@@ -558,12 +542,12 @@ def createAutoGraph(fileName, dataItem, gLabel, gTitle, gStart,
     # Show the data, or a moving average trend line, or both.
     strCmd += 'DEF:dSeries=%s:%s:AVERAGE ' % (_RRD_FILE, dataItem)
     if addTrend == 0:
-        strCmd += 'LINE2:dSeries#0400ff '
+        strCmd += 'LINE1:dSeries#0400ff '
     elif addTrend == 1:
-        strCmd += 'CDEF:smoothed=dSeries,86400,TREND LINE2:smoothed#0400ff '
+        strCmd += 'CDEF:smoothed=dSeries,86400,TREND LINE2:smoothed#006600 '
     elif addTrend == 2:
         strCmd += 'LINE1:dSeries#0400ff '
-        strCmd += 'CDEF:smoothed=dSeries,86400,TREND LINE2:smoothed#0400ff '
+        strCmd += 'CDEF:smoothed=dSeries,86400,TREND LINE2:smoothed#006600 '
     
     # if wind plot show color coded wind direction
     if dataItem == 'windspeedmph':
@@ -589,8 +573,8 @@ def createAutoGraph(fileName, dataItem, gLabel, gTitle, gStart,
         strCmd += 'AREA:nwdir#FF00FF:NW '  # Magenta
     ##end if
      
-    if verboseDebug:
-        print('%s\n' % strCmd) # DEBUG
+    if debugMode:
+        print('\n%s' % strCmd) # DEBUG
     
     # Run the formatted rrdtool command as a subprocess.
     try:
@@ -601,8 +585,8 @@ def createAutoGraph(fileName, dataItem, gLabel, gTitle, gStart,
         print('rrdtool graph failed: %s' % (exError.output))
         return False
 
-    if debugOption:
-        print('rrdtool graph: %s' % result.decode('utf-8'))
+    if verboseMode:
+        print('rrdtool graph: %s' % result.decode('utf-8'), end='')
 
     return True
 ##end def
@@ -658,14 +642,14 @@ def generateLongGraphs():
 
     # 12 month long graphs
     createAutoGraph('12m_windspeedmph', 'windspeedmph', 'miles\ per\ hour', \
-                'Sustained\ Wind', 'end-12months', 0, 0, 1, True)
+                'Sustained\ Wind', 'end-12months', 0, 0, 0, True)
     createAutoGraph('12m_tempf', 'tempf', 'degrees\ Fahrenheit', \
-                'Temperature', 'end-12months',0, 0, 1, True)
+                'Temperature', 'end-12months',0, 0, 0, True)
     createAutoGraph('12m_pressure', 'pressure', 'inches\ Hg', \
 #                'Barometric\ Pressure', 'end-12months', 29.0, 30.8, 1, True)
-                'Barometric\ Pressure', 'end-12months', 0, 0, 1, True)
+                'Barometric\ Pressure', 'end-12months', 0, 0, 0, True)
     createAutoGraph('12m_humidity', 'humidity', 'percent', \
-                'Relative\ Humidity', 'end-12months', 0, 0, 1, True)
+                'Relative\ Humidity', 'end-12months', 0, 0, 0, True)
     createAutoGraph('12m_rainin', 'rainin', 'inches', \
                 'Rain\ Fall', 'end-12months', 0, 0, 0, False)
 ##end def
@@ -673,35 +657,30 @@ def generateLongGraphs():
 def getCLarguments():
     """Get command line arguments - there are two possible arguments
           -d turns on debug mode
-          -v turns on verbose debug mode
-          -r reports update fails
-          -t sets the update poll interval in seconds (default=10)
+          -v turns on verbose mode
+          -r report failed updates
+          -p sets the update poll interval in seconds (default=10)
           -u sets the weather station url
        Returns: nothing
     """
-    global debugOption, verboseDebug, dataUpdateInterval
+    global verboseMode, debugMode, dataRequestInterval
     global reportUpdateFails, weatherStationUrl
 
     index = 1
     while index < len(sys.argv):
 
         # Debug and error reporting options
-        if sys.argv[index] == '-d':
-            debugOption = True
-        elif sys.argv[index] == '-v':
-            debugOption = True
-            verboseDebug = True
+        if sys.argv[index] == '-v':
+            verboseMode = True
+        elif sys.argv[index] == '-d':
+            verboseMode = True
+            debugMode = True
         elif sys.argv[index] == '-r':
             reportUpdateFails = True
 
         # Update period and url options
-        elif sys.argv[index] == '-t':
-            try:
-                tempVal = float(sys.argv[index + 1])
-            except:
-                print('invalid update period')
-                exit(-1)
-            dataUpdateInterval = tempVal
+        elif sys.argv[index] == '-p':
+            dataRequestInterval = float(sys.argv[index + 1])
             index += 1
         elif sys.argv[index] == '-u':
             weatherStationUrl = sys.argv[index + 1]
@@ -749,12 +728,13 @@ def main():
                   (getTimeStamp()))
 
     signal.signal(signal.SIGTERM, terminateAgentProcess)
+    signal.signal(signal.SIGINT, terminateAgentProcess)
 
     # Get the command line arguments.
     getCLarguments()
 
     # last time the data file to the web server updated
-    lastCheckForUpdateTime = -1
+    lastDataRequestTime = -1
     # last time day charts were generated
     lastDayChartUpdateTime = -1
     # last time long term charts were generated
@@ -774,34 +754,28 @@ def main():
 
         currentTime = time.time() # get current time in seconds
 
-        # After every weather station data transmission, get and process
-        # weather station data from the local file that gets updated by the
-        # submit.php script.
-        if currentTime - lastCheckForUpdateTime > dataUpdateInterval:
-            lastCheckForUpdateTime = currentTime
+        # Every data update interval request data from the weather
+        # station and process the received data.
+        if currentTime - lastDataRequestTime > dataRequestInterval:
+            lastDataRequestTime = currentTime
             dData = {}
-            result = True
  
             # At midnight send the reset signal to the weather station.
-            checkForMidnight()
+            midnightReset()
 
-            # Read the input data file from the submit.php script which
-            # processes data from the weather station.
-            sData = getWeatherData()
+            # Send a request for weather data to the weather station.
+            result = getWeatherData(dData)
 
-            # If no data received, then do not proceed any further.
-            if sData == 'ok':
-                continue
-            elif sData == None:
-                result = False
+            if result:
+                # If 'ok' received, then do not proceed any further as
+                # the weather station is responding to a maintenance
+                # command. This happens after a midnight reset.
+                if dData['content'] == 'ok':
+                    continue
 
             # Upon successfully getting the data, parse the data.
             if result:
-                 result = parseInputDataString(sData, dData)
-
-            # Verify that the weather station is still online.
-            if result:
-                 result = verifyTimestamp(dData)
+                 result = parseDataString(dData)
 
             # If the station is online and the data successfully parsed, 
             # then convert the data.
@@ -811,13 +785,12 @@ def main():
             # If the data successfully converted, then the write the data
             # to the output data file.
             if result:
-               writeOutputDataFile(dData, _OUTPUT_DATA_FILE)
-               writeForwardingFile(sData)
+               result = writeOutputFile(dData)
 
             # At the rrdtool database update interval write the data to
             # the rrdtool database.
-            if result and (currentTime - lastDatabaseUpdateTime > \
-                   _DATABASE_UPDATE_INTERVAL):   
+            if result and (currentTime - lastDatabaseUpdateTime >
+                           _DATABASE_UPDATE_INTERVAL):   
                 lastDatabaseUpdateTime = currentTime
                 # Update the round robin database with the parsed data.
                 result = updateDatabase(dData)
@@ -844,12 +817,14 @@ def main():
         # information for debugging and performance analysis.
 
         elapsedTime = time.time() - currentTime
-        if debugOption and not verboseDebug:
-            #print()
-            pass
-        if debugOption:
-            print('processing time: %6f sec\n' % elapsedTime)
-        remainingTime = dataUpdateInterval - elapsedTime
+        if verboseMode:
+            if result:
+                print("update successful: %6f sec\n"
+                      % elapsedTime)
+            else:
+                print("update failed: %6f sec\n"
+                      % elapsedTime)
+        remainingTime = dataRequestInterval - elapsedTime
         if remainingTime > 0.0:
             time.sleep(remainingTime)
     ## end while
@@ -857,10 +832,6 @@ def main():
 ##end def
 
 if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        print('\n', end='')
-        terminateAgentProcess('KeyboardInterrupt','Module')
+    main()
 
 ##end module
