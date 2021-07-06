@@ -9,7 +9,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body {
-    background-image: url("static/chalk.jpg");
+    background-image: url("static/sunsetSky.jpg");
 }
 h2 {
     font: bold 24px arial, sans-serif;
@@ -70,10 +70,10 @@ h4 {
 img.chart {
     width: 100%;
 }
-span.chartNav {
+span.chartSelector {
     margin: auto;
 }
-ul.chartNav {
+ul.selectorElement {
     list-style-type: none;
     margin: 10px;
     padding: 0;
@@ -81,19 +81,24 @@ ul.chartNav {
     background-color: #bbb;
     text-align: center;
 }
-li.chartNav {
+li.selectorElement {
     display: inline-block;
     font: bold 18px arial, sans-serif;
     color: black;
 }
-text.chartNav:hover {
+span.selectorElement:hover {
     background-color: #333;
     cursor: pointer;
     color: white;
 }
-text.chartNav {
+span.selectorElement {
     display: inline-block;
     padding: 8px 12px;
+}
+#iframe_a {
+    border:none;
+    width:100%;
+    height:1070px;
 }
 </style>
 </head>
@@ -108,9 +113,9 @@ DIY Weather Station</a></h2>
 <h4>Albany, Oregon</h4>
 
 <div id="datetime">
-<text id="date"></text>
+<span id="date"></span>
 &nbsp;&nbsp;
-<text id="time"></text>
+<span id="time"></span>
 </div>
 
 <div class="rowContainer">
@@ -121,9 +126,9 @@ Humidity:<br>
 Pressure:
 </div>
 <div class="dataItems">
-<text id="tempf"></text> <sup>o</sup>F<br>
-<text id="humidity"></text> %<br>
-<text id="pressure"></text> "Hg
+<span id="tempf"></span> <sup>o</sup>F<br>
+<span id="humidity"></span> %<br>
+<span id="pressure"></span> "Hg
 </div>
 </div>
 <div class="currentDataCell" style="text-align: center;">
@@ -155,8 +160,8 @@ Last Hour:<br>
 Daily Total:
 </div>
 <div class="dataItems">
-<text id="rainin"></text> "<br>
-<text id="dailyrainin"></text> "
+<span id="rainin"></span> "<br>
+<span id="dailyrainin"></span> "
 </div>
 </div>
 <div class="rainStatusCell">
@@ -167,28 +172,49 @@ Battery Level:<br>
 Ambient Light:
 </div>
 <div class="dataItems">
-<text id="status"></text><br>
-<text id="batt_lvl"></text><br>
-<text id="light_lvl"></text> %
+<span id="status"></span><br>
+<span id="batt_lvl"></span><br>
+<span id="light_lvl"></span> %
 </div>
 </div>
 </div>
 
-<span class="chartNav">
-<ul class="chartNav">
-<li class="chartNav">Select charts:</li>
-<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(1)">
-24 hours</text></li>
-<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(2)">
-10 days</text></li>
-<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(3)">
-3 months</text></li>
-<li class="chartNav"><text class="chartNav" onclick="setChartPeriod(4)">
-12 months</text></li>
+<span class="chartSelectors">
+<ul class="selectorElement">
+<li class="selectorElement">Select charts:</li>
+<li class="selectorElement"><span class="selectorElement"
+ onclick="setChartPeriod(1)">24 hours</span></li>
+<li class="selectorElement"><span class="selectorElement"
+ onclick="setChartPeriod(2)">10 days</span></li>
+<li class="selectorElement"><span class="selectorElement"
+ onclick="setChartPeriod(3)">3 months</span></li>
+<li class="selectorElement"><span class="selectorElement"
+ onclick="setChartPeriod(4)">12 months</span></li>
+<li id="customSelector" class="selectorElement" style="visibility:hidden;">
+<span  class="selectorElement"
+ onclick="setChartPeriod(0)">Custom...</span></li>
 </ul>
 </span>
+
+<div class="rowContainer" id="customChartsContainer" style="display:none;">
+<div class="currentDataCell" style="text-align:center;">
+<form id="fmDateSelector" action="weather.php" method="post"
+ target="iframe_a">
+<label for="beginDate">Begin Date: </label>
+<input id="beginDate" name="beginDate" type="date" value="mm/dd/yyyy" />
+<label for="endDate">End Date: </label>
+<input id="endDate" name="endDate" type="date" value="mm/dd/yyyy" />
+<br><br>
+<input type="button" onclick="getCustomCharts()" value="Get Charts">
+</form>
+<span id="errorMsg"></span><br>
+<iframe id="iframe_a" name="iframe_a"></iframe>
+</div>
+</div>
+
 <br>
 
+<div class="rowContainer" id="stockChartsContainer">
 <div class="chartContainer">
 <img class="chart" id="windspeedmph_g">
 </div>
@@ -207,6 +233,7 @@ Ambient Light:
 
 <div class="chartContainer">
 <img class="chart" id="rainin_g">
+</div>
 </div>
 
 <div id="notes">
@@ -242,6 +269,7 @@ Ambient Light:
 </div>
 
 <script>
+"use strict";
 
 /* Global constants */
 
@@ -251,6 +279,13 @@ var compassPoint = [ 'N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S',
                      '-n/a-', ''];
 
 /* Global DOM objects */
+
+// Document elements
+var customChartsContainer = document.getElementById("customChartsContainer");
+var stockChartsContainer = document.getElementById("stockChartsContainer");
+var fmDateSelector = document.getElementById("fmDateSelector");
+var errorMsg = document.getElementById("errorMsg");
+var customSelector = document.getElementById("customSelector");
 
 // Graphical canvas
 var cWind = document.getElementById("cWind");
@@ -290,9 +325,11 @@ var ctxWindGust10m = cWindGust10m.getContext("2d");
 
 /* Global variables */
 
-var graphPeriod;
+var chartPeriod = 1;
 
 function main() {
+    httpRequest.timeout = 3000;
+
     // Set graphical origin to center of canvas
     ctxWind.translate(cWind.width / 2, cWind.height / 2);
     ctxAvgWind.translate(cAvgWind.width / 2, cAvgWind.height / 2);
@@ -312,29 +349,37 @@ function main() {
         displayOfflineStatus();
     };
 
+    initializeDateSelector();
     getWeatherData();
-    graphPeriod = 1;
-    getWeatherGraphs();
+    getWeatherCharts();
     setInterval(getWeatherData, 10000);
-    setInterval(getWeatherGraphs, 300000);
+    setInterval(getWeatherCharts, 300000);
 }
 
 function getWeatherData() {
-    httpRequest.open("GET", weatherDataUrl, true);
-    httpRequest.timeout = 3000;
+    httpRequest.open("POST", weatherDataUrl, true);
     httpRequest.send();
 }
 
 function setChartPeriod(n) {
-    graphPeriod = n;
-    getWeatherGraphs();
+    /* Show custom charts if custom charts selected, otherwise show
+       stock charts. */
+    chartPeriod = n;
+    if (n == 0) {
+        customChartsContainer.style.display = "block";
+        stockChartsContainer.style.display = "none";
+    } else {
+        customChartsContainer.style.display = "none";
+        stockChartsContainer.style.display = "block";
+        getWeatherCharts();   
+    }
 }
 
-function getWeatherGraphs() {
+function getWeatherCharts() {
     var d = new Date;
     var pfx;
 
-    switch(graphPeriod) {
+    switch(chartPeriod) {
         case 1:
             pfx = "1d_";
             break;
@@ -359,6 +404,12 @@ function getWeatherGraphs() {
 function displayData(dataItem) {
     var timeStamp, date, time, hourminute, status;
     var localDateObj, localTimeZone, timeZoneShift;
+
+    // Custom charts can only be generated by the local server, i.e,
+    // with access to rrdtool database.
+    if (dataItem.serverMode == "primary") {
+        customSelector.style.visibility = "visible";
+    }
 
     timeStamp = dataItem.date;
     date = timeStamp.split(" ")[0];
@@ -427,6 +478,23 @@ function displayOfflineStatus() {
     drawIndicator(ctxAvgWind, cAvgWind, 16, "");
     drawIndicator(ctxWindGust, cWindGust, 16, "");
     drawIndicator(ctxWindGust10m, cWindGust10m, 16, "");
+}
+
+function initializeDateSelector() {
+    var d = new Date();
+
+    var dEnd = new Date(d.getFullYear(),
+               d.getMonth(), d.getDate() - 0);
+
+    var dBegin = new Date(d.getFullYear(),
+               d.getMonth(), d.getDate() - 1);
+
+    document.getElementById("beginDate").valueAsDate = dBegin;
+    document.getElementById("endDate").valueAsDate = dEnd;
+}
+
+function getCustomCharts() {
+    fmDateSelector.submit();
 }
 
 /* wind speed and direction graphical indicator */

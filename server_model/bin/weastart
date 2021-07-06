@@ -1,28 +1,28 @@
 #!/bin/bash
-# Starts the weatherAgent process.  Only starts up the process
-# if the process is not already running.
 #
-# Use options to log debugging messages.  For example,
-# "weastart -r" to log occurances when the weather station fails
-# to update the server.
+# The monitor url can look something like http://192.168.1.155, or
+# something linke http://radiationMonitor.domain.com depending on
+# whether your local network uses a domain name server.
 #
-
-DEVICE_URL="{weather station url | ip address}"
 
 APP_PATH="/home/$USER/bin"
 LOG_PATH="/home/$USER/log"
+
 AGENT_NAME="[w]eatherAgent.py"
-EXEC_NAME="weatherAgent.py -u $DEVICE_URL"
+SOURCE_URL="{your weather station url}"
 
 PROCESS_ID="$(ps x | awk -v a=$AGENT_NAME '$7 ~ a {print $1}')"
 
 if [ -n "$PROCESS_ID" ]; then
-  # -n option true if length of PROCESS_ID is non-zero
   if [ "$1" != "-q" ]; then
     printf "weather agent running [%s]\n" $PROCESS_ID
   fi
 else
   printf "starting up weather agent\n"
   cd $APP_PATH
-  ./$EXEC_NAME $1>> $LOG_PATH/weatherAgent.log 2>&1 &
+  if [ "$1" != "" ]; then
+    ./$AGENT_NAME $1 -u $SOURCE_URL
+  else
+    ./$AGENT_NAME -u $SOURCE_URL >> $LOG_PATH/weatherAgent.log 2>&1 &
+  fi
 fi
