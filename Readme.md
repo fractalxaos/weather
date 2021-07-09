@@ -11,13 +11,13 @@ Building the weather station will give you an excellent introduction to a variet
 You can find all the required software available under open source, GNU license at this project site.  Please read the <a href="server_model/docs/DIY Weather Project Description.pdf">project description document</a> for details on procuring the materials, assembling the weather station and installing the software.
 </p>
 <hr>
-<img src="./images/WeatherStation.jpg"><br>
+<img src="./docs/images/WeatherStation.jpg"><br>
 <b>Weather station, anchored with heavy bricks, deployed on the roof.</b>
 <br><br>
-<img src="./images/WeatherStationElectronics_assembly.jpg"><br>
+<img src="./docs/images/WeatherStationElectronics_assembly.jpg"><br>
 <b>Weather station electronics assembly slides into solar shield housing.</b>
 <br><br>
-<img src="./images/WeatherWebPage.jpg"><br>
+<img src="./docs/images/WeatherWebPage.jpg"><br>
 <b>Weather station data displayed on web page.</b>
 <br>
 </body>
