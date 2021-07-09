@@ -73,7 +73,7 @@ _STATION_PIN = '12345' # weather station PIN
    ### DEFAULT WEATHER STATION URL ###
 
 _DEFAULT_WEATHER_STATION_URL = \
-    "http://192.168.1.26"
+    "{your weather station url}"
 
     ### FILE AND FOLDER LOCATIONS ###
 
