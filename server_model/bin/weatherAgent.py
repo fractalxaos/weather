@@ -50,6 +50,8 @@
 #         model where the weather station acts in the role of http server
 #         and network clients request data from weather station
 #   * v24 released 14 Jun 2021 by J L Owrey; minor revisions
+#   * v25 released 9 Jul 2021 by J L Owrey; improved handling of
+#         station midnight reset function
 #
 #2345678901234567890123456789012345678901234567890123456789012345678901234567890
 
@@ -71,7 +73,7 @@ _STATION_PIN = '12345' # weather station PIN
    ### DEFAULT WEATHER STATION URL ###
 
 _DEFAULT_WEATHER_STATION_URL = \
-    "{your weather station url}"
+    "http://192.168.1.26"
 
     ### FILE AND FOLDER LOCATIONS ###
 
@@ -130,7 +132,7 @@ reportUpdateFails = False
 # used for detecting system faults and weather station online
 # or offline status
 failedUpdateCount = 0
-stationOnline = True
+stationOnline = False
 
 # Periodicity of http requests sent to the weather station
 #   can be modified by command line argument
@@ -193,9 +195,9 @@ def terminateAgentProcess(signal, frame):
        Parameters: signal, frame - sigint parameters
        Returns: nothing
     """
-    setStatusToOffline()
     print('%s terminating weather agent process' % \
               (getTimeStamp()))
+    setStatusToOffline()
     sys.exit(0)
 ##end def
 
@@ -221,9 +223,7 @@ def getWeatherData(dData):
 
         response = urlopen(sUrl, timeout=_HTTP_REQUEST_TIMEOUT)
 
-        if verboseMode:
-            requestTime = time.time() - currentTime
-            print("http request: %.4f seconds" % requestTime)
+        requestTime = time.time() - currentTime
 
         content = response.read().decode('utf-8')
         content = content.replace('\n', '')
@@ -235,30 +235,20 @@ def getWeatherData(dData):
         # If no response is received from the device, then assume that
         # the device is down or unavailable over the network.  In
         # that case return None to the calling function.
-        if verboseMode:
-            print("http error: %s" % exError)
-        elif reportUpdateFails:
-            print("%s http error: %s" % (getTimeStamp(), exError))
+        if reportUpdateFails:
+            print("%s " % getTimeStamp(), end='')
+        if reportUpdateFails or verboseMode:
+            print("http request failed: %s" % exError)
         return False
     ##end try
 
     if debugMode:
         print(content)
+    if verboseMode:
+        print("http request successful: "\
+              "%.4f seconds" % requestTime)
     
     dData['content'] = content
-
-    # If reset command was sent to weather station then allow extra time
-    # for the station to reset and re-acquire the wifi access point.
-    if maintenanceCommand.find('/r') > -1:
-        if content.find('ok') > -1:
-            maintenanceCommand = ''
-            print() # blank line
-            time.sleep(_MIDNIGHT_RESET_HOLDOFF)
-        else:
-            print("%s midnight reset failed" % getTimeStamp())
-            return False
-    ## end if
- 
     return True
 ##end def
 
@@ -279,7 +269,7 @@ def parseDataString(dData):
     except Exception as exError:
         print("%s parse failed: %s" % (getTimeStamp(), exError))
         return False
-
+    
     # Verfy the expected number of data items have been received.
     if len(lData) != 15:
         print("%s parse failed: corrupted data string" % getTimeStamp())
@@ -289,9 +279,11 @@ def parseDataString(dData):
     for item in lData:
         if "=" in item:
             dData[item.split('=')[0]] = item.split('=')[1]
+
     # Add date and status to dictionary object
     dData['status'] = 'online'
     dData['date'] = getTimeStamp()
+    dData['serverMode'] = _SERVER_MODE
 
     return True
 ##end def
@@ -363,37 +355,6 @@ def convertData(dData):
     return True
 ##end def
 
-def setStationStatus(updateSuccess):
-    """Detect if radiation monitor is offline or not available on
-       the network. After a set number of attempts to get data
-       from the monitor set a flag that the station is offline.
-       Parameters:
-           updateSuccess - a boolean that is True if data request
-                           successful, False otherwise
-       Returns: nothing
-    """
-    global failedUpdateCount, stationOnline, maintenanceCommand
-
-    if updateSuccess:
-        failedUpdateCount = 0
-        # Set status and send a message to the log if the station was
-        # previously offline and is now online.
-        if not stationOnline:
-            print('%s station online' % getTimeStamp())
-            stationOnline = True
-    else:
-        # The last attempt failed, so update the failed attempts
-        # count.
-        failedUpdateCount += 1
-    ## end if
-
-    if failedUpdateCount >= _MAX_FAILED_DATA_REQUESTS:
-        # Max number of failed data requests, so set
-        # monitor status to offline.
-        maintenanceCommand = ''
-        setStatusToOffline()
-##end def
-
 def writeOutputFile(dData):
     """Writes to a file a formatted string containing the weather data.
        The file is written to the document dynamic data folder for use
@@ -409,7 +370,6 @@ def writeOutputFile(dData):
     try:
         for key in dData:
             jsData.update({key:dData[key]})
-        jsData.update({"serverMode":"%s" % _SERVER_MODE })
         sData = "[%s]" % json.dumps(jsData)
     except Exception as exError:
         print("%s writeOutputFile: %s" % (getTimeStamp(), exError))
@@ -429,7 +389,36 @@ def writeOutputFile(dData):
     return True
 ##end def
 
-def midnightReset():
+def setStationStatus(updateSuccess):
+    """Detect if radiation monitor is offline or not available on
+       the network. After a set number of attempts to get data
+       from the monitor set a flag that the station is offline.
+       Parameters:
+           updateSuccess - a boolean that is True if data request
+                           successful, False otherwise
+       Returns: nothing
+    """
+    global failedUpdateCount, stationOnline, maintenanceCommand
+
+    if updateSuccess:
+        failedUpdateCount = 0
+        # Set status and send a message to the log if the station was
+        # previously offline and is now online.
+        if not stationOnline:
+            print('%s station online' % getTimeStamp())
+            stationOnline = True
+    elif failedUpdateCount == _MAX_FAILED_DATA_REQUESTS - 1:
+        # Max number of failed data requests, so set
+        # station status to offline.
+        maintenanceCommand = ''
+        setStatusToOffline()
+        failedUpdateCount += 1
+    else:
+        failedUpdateCount += 1
+    ## end if
+##end def
+
+def midnightReset(dData):
     """Check the time to see if midnight has just occurred during the last
        device update cycle. If so, then send a reset message to the weather
        station.
@@ -445,7 +434,6 @@ def midnightReset():
     # Perform a test of the midnight reset feature if requested.
     if testResetOffsetSec > 0:
         secondsSinceMidnight = abs(testResetOffsetSec - secondsSinceMidnight)
-        #print('secondsSinceMidnight:%s' % secondsSinceMidnight)
 
     # If the number of elapsed seconds is smaller than the update interval
     # then midnight has just occurred and the weather station needs to be
@@ -455,8 +443,32 @@ def midnightReset():
             print('%s sending midnight reset signal' % \
                  (getTimeStamp()))
         maintenanceCommand = '/' + _STATION_PIN + '/r'
-    return
+        # Send reset maintenance command. Return true if command
+        # successful, or false otherwise.
+        if not getWeatherData(dData):
+            return False
+        return verifyMidnightReset(dData)
+    else:
+        return True
+    
 ##end def
+
+def verifyMidnightReset(dData):
+    global maintenanceCommand
+    # If reset command was sent to weather station then allow extra time
+    # for the station to reset and re-acquire the wifi access point.
+    #if dData['content'].find('ok') > -1:
+    if dData['content'] == 'ok':
+        maintenanceCommand = ''
+        time.sleep(_MIDNIGHT_RESET_HOLDOFF)
+        if verboseMode:
+            print("%s midnight reset successful" % getTimeStamp())
+        return True
+    else:
+        print("%s midnight reset failed: resending" % getTimeStamp())
+        return False
+    ## end if
+## end def
 
     ### DATABASE FUNCTIONS ###
 
@@ -497,7 +509,7 @@ def updateDatabase(dData):
         return False
 
     if verboseMode and not debugMode:
-        print('update database')
+        print('database update successful')
 
     return True
 ##end def
@@ -725,6 +737,7 @@ def main():
     # uncomment to test midnight reset feature
     #testMidnightResetFeature()
 
+    print('===================')
     print('%s starting up weather agent process' % \
                   (getTimeStamp()))
 
@@ -762,17 +775,11 @@ def main():
             dData = {}
  
             # At midnight send the reset signal to the weather station.
-            midnightReset()
+            result = midnightReset(dData)
 
             # Send a request for weather data to the weather station.
-            result = getWeatherData(dData)
-
             if result:
-                # If 'ok' received, then do not proceed any further as
-                # the weather station is responding to a maintenance
-                # command. This happens after a midnight reset.
-                if dData['content'] == 'ok':
-                    continue
+                result = getWeatherData(dData)
 
             # Upon successfully getting the data, parse the data.
             if result:
