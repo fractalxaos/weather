@@ -1,0 +1,9 @@
+#!/bin/bash
+# Displays the weatherDataInput file every second. This is
+# useful for system verification and testing.  It allows for
+# confirming that the weather station is indeed regularly
+# sending data to the server.
+
+# define location of weather data file to display
+
+watch -n 10 -d 'curl -m2 -s weatherpi.local/weather/dynamic/weatherData.js;echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"'

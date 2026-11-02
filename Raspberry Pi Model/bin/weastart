@@ -1,0 +1,29 @@
+#!/bin/bash
+#
+# The monitor url can look something like http://192.168.1.155, or
+# something linke http://radiationMonitor.domain.com depending on
+# whether your local network uses a domain name server.
+#
+
+APP_PATH="/home/$USER/bin"
+LOG_PATH="/home/$USER/log"
+AGENT_NAME="[w]eatherAgent.py"
+
+SOURCE_URL="{URL of source server if this is a mirror server}"
+SOURCE_SERVER="{your weather station host name}"
+
+PROCESS_ID="$(ps x | awk -v a=$AGENT_NAME '$7 ~ a {print $1}')"
+
+if [ -n "$PROCESS_ID" ]; then
+  if [ "$1" != "-q" ]; then
+    printf "weather agent running [%s]\n" $PROCESS_ID
+  fi
+else
+  #printf "starting up weather agent\n"
+  cd $APP_PATH
+  if [ "$1" != "" ]; then
+    ./$AGENT_NAME $1 -r -u $SOURCE_URL -s $SOURCE_SERVER
+  else
+    ./$AGENT_NAME -r -u $SOURCE_URL -s $SOURCE_SERVER >> $LOG_PATH/weatherAgent.log 2>&1 &
+  fi
+fi
